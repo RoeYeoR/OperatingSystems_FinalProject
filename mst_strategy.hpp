@@ -12,6 +12,8 @@ public:
     virtual int longestDistance(const Graph& graph) = 0;      
     virtual double averageDistance(const Graph& graph) = 0;  
     virtual int shortestDistance(const Graph& graph, int u, int v) = 0; 
+   virtual Graph& getGraph(std::vector<Graph::Edge> mst) = 0; 
+
     virtual ~MSTStrategy() = default;
 };
 

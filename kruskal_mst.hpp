@@ -10,6 +10,7 @@ public:
     int longestDistance(const Graph& graph) override;
     double averageDistance(const Graph& graph) override;
     int shortestDistance(const Graph& graph, int u, int v) override;
+    virtual Graph& getGraph(std::vector<Graph::Edge> mst) override; 
 
 private:
     std::vector<std::vector<std::pair<int, int>>> mstAdjList; // Adjacency list for MST

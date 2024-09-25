@@ -16,6 +16,7 @@ public:
 
     void addEdge(int u, int v, int w);  // Add an edge to the graph
     std::vector<Edge> getEdges() const; // Get all edges
+    std::vector<Edge> getEdgesFromNode(int node) const; 
     int getVertices() const;
 
 private:

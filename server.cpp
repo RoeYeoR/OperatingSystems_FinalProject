@@ -93,18 +93,21 @@ void Server::readGraphFromClient(int clientSocket) {
 // Process the graph and calculate the MST and additional metrics (Stage 2)
 void Server::processGraph(const Graph& graph, int clientSocket) {
     auto mstSolver = MSTFactory::createMST(mstType);
-    int totalWeight = mstSolver->totalWeight(graph);
-    int longestDistance = mstSolver->longestDistance(graph);
-    double averageDistance = mstSolver->averageDistance(graph);
-
+    Graph& mst =  mstSolver->getGraph(mstSolver->solve(graph));
+    int totalWeight = mstSolver->totalWeight(mst);
+    int longestDistance = mstSolver->longestDistance(mst);
+    double averageDistance = mstSolver->averageDistance(mst);
+   
     // Send results to the client
-    sendAO->addTask([this, totalWeight, longestDistance, averageDistance, clientSocket]() {
-        sendResultToClient(totalWeight, longestDistance, averageDistance, clientSocket);
+    sendAO->addTask([this,mst,totalWeight, longestDistance, averageDistance, clientSocket]() {
+        
+        sendResultToClient(mst,totalWeight, longestDistance, averageDistance, clientSocket);
     });
 }
 
 // Send the results to the client (Stage 3)
-void Server::sendResultToClient(int totalWeight, int longestDistance, double averageDistance, int clientSocket) {
+void Server::sendResultToClient(const Graph& mst,int totalWeight, int longestDistance, double averageDistance, int clientSocket) {
+    auto mstSolver = MSTFactory::createMST(mstType);
     write(clientSocket, &totalWeight, sizeof(totalWeight));
     write(clientSocket, &longestDistance, sizeof(longestDistance));
     write(clientSocket, &averageDistance, sizeof(averageDistance));
@@ -115,8 +118,8 @@ void Server::sendResultToClient(int totalWeight, int longestDistance, double ave
     read(clientSocket, &v, sizeof(v));
 
     // Calculate and send shortest distance
-    int shortestDistance = 0; // Assuming you have a method to compute this
-    // shortestDistance = mstSolver->shortestDistance(graph, u, v); // Uncomment when implemented
+    //int shortestDistance = 0; // Assuming you have a method to compute this
+    int shortestDistance = mstSolver->shortestDistance(mst, u, v); // Uncomment when implemented
 
     write(clientSocket, &shortestDistance, sizeof(shortestDistance));
     close(clientSocket);
@@ -205,7 +208,14 @@ void Server::threadWorker() {
 }
 
 int main() {
-    Server server(8080, MSTType::PRIM); // or however you initialize it
+    Server server(8082, MSTType::PRIM); // or however you initialize it
     server.start();
+
+    // Keep the main thread alive
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+
     return 0;
 }
