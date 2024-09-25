@@ -3,6 +3,26 @@
 #include <vector>
 #include <queue>
 #include <utility> // For std::pair
+#include <climits>
+
+
+
+Graph& KruskalMST::getGraph(std::vector<Graph::Edge> mst)
+{
+      // Create a new Graph with the number of vertices from the original graph
+    Graph* mstGraph = new Graph(mst.size() + 1); // +1 for the number of vertices; adjust if needed based on your structure
+
+    // Add edges from the MST vector to the new graph
+    for (const auto& edge : mst) {
+        mstGraph->addEdge(edge.src, edge.dest, edge.weight);
+        // Since it's an undirected graph, add the reverse edge as well
+        mstGraph->addEdge(edge.dest, edge.src, edge.weight);
+    }
+
+    // Return the new graph containing the MST
+    return *mstGraph; // Return a reference to the newly created graph
+
+}
 
 
 std::vector<Graph::Edge> KruskalMST::solve(const Graph& graph) {
@@ -44,8 +64,17 @@ int KruskalMST::totalWeight(const Graph& graph) {
 }
 
 int KruskalMST::longestDistance(const Graph& graph) {
-    std::vector<bool> visited(graph.getVertices(), false);
-    return dfsLongestPath(0, visited); // Start from vertex 0
+   std::vector<bool> visited(graph.getVertices(), false);
+    int max =0;
+    for (int i = 0; i < graph.getVertices(); i++)
+    {
+        int temp = dfsLongestPath(i, visited);
+        if(temp> max)
+        {
+            max = temp;
+        }
+    }
+    return max;
 }
 
 double KruskalMST::averageDistance(const Graph& graph) {
@@ -92,27 +121,30 @@ int KruskalMST::dfsLongestPath(const Graph& graph) {
 
 // BFS to find shortest path
 int KruskalMST::bfsShortestPath(const Graph& graph, int start, int end) {
-     std::queue<std::pair<int, int>> q; // pair<node, current distance>
+     std::queue<int> q; // Queue for BFS
+    std::vector<int> distances(graph.getVertices(), INT_MAX); // Vector to store shortest distances
     std::vector<bool> visited(graph.getVertices(), false);
-    q.push({start, 0}); // Start from the starting node
+    
+    q.push(start);
+    distances[start] = 0; // Distance to start node is 0
     visited[start] = true;
 
     while (!q.empty()) {
-        auto [node, dist] = q.front();
+        int node = q.front();
         q.pop();
 
-        if (node == end) {
-            return dist; // Return the distance if we reached the end node
-        }
+        for (const auto& edge : graph.getEdgesFromNode(node)) { // Get edges of the current node
+            int nextNode = edge.dest; // Use edge's destination
+            int weight = edge.weight;  // Use edge's weight
 
-        for (const auto& neighbor : mstAdjList[node]) { // Assuming mstAdjList holds the MST
-            int nextNode = neighbor.first; // neighbor.first is the vertex
-            if (!visited[nextNode]) {
+            // Check if we found a shorter path
+            if (!visited[nextNode] && distances[node] + weight < distances[nextNode]) {
+                distances[nextNode] = distances[node] + weight;
+                q.push(nextNode);
                 visited[nextNode] = true;
-                q.push({nextNode, dist + neighbor.second}); // Add to queue with updated distance
             }
         }
     }
 
-    return -1; // If the end node is not reachable
+    return distances[end] == INT_MAX ? -1 : distances[end]; // Return -1 if not reachable
 }

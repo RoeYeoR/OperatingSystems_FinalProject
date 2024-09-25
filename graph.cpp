@@ -10,6 +10,18 @@ std::vector<Graph::Edge> Graph::getEdges() const {
     return edges;
 }
 
+std::vector<Graph::Edge> Graph::getEdgesFromNode(int node) const {
+    std::vector<Edge> nodeEdges;
+    for (const auto& edge : edges) {
+        if (edge.src == node) {
+            nodeEdges.push_back(edge);
+        }
+    }
+    return nodeEdges;
+}
+
+
+
 int Graph::getVertices() const {
     return V;
 }

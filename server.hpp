@@ -24,8 +24,8 @@ private:
     // Methods for pipeline stages
     void readGraphFromClient(int clientSocket); // Stage 1
     void processGraph(const Graph& graph, int clientSocket); // Stage 2
-    void sendResultToClient(int totalWeight, int clientSocket); // Stage 3
-    void sendResultToClient(int totalWeight, int longestDistance, double averageDistance, int clientSocket);
+    //void sendResultToClient(int totalWeight, int clientSocket); // Stage 3
+    void sendResultToClient(const Graph& mst,int totalWeight, int longestDistance, double averageDistance, int clientSocket);
 
     // Leader-Follower methods
     void leaderWorker();  // Leader thread to accept connections
