@@ -13,6 +13,7 @@ public:
     virtual double averageDistance(const Graph& graph) = 0;  
     virtual int shortestDistance(const Graph& graph, int u, int v) = 0; 
    virtual Graph& getGraph(std::vector<Graph::Edge> mst) = 0; 
+    virtual int dijkstraShortestPath(const Graph& graph, int start, int end) =0;
 
     virtual ~MSTStrategy() = default;
 };
