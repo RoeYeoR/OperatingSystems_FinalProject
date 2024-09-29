@@ -72,18 +72,40 @@ void Server::readGraphFromClient(int clientSocket) {
     int E;
     read(clientSocket, &E, sizeof(E));
     std::cout << "Number of edges received from client: " << E << std::endl;
-    for (int i = 0; i < E; ++i) {
-        int u, v, w;
-        if (read(clientSocket, &u, sizeof(u)) != sizeof(u) ||
-            read(clientSocket, &v, sizeof(v)) != sizeof(v) ||
-            read(clientSocket, &w, sizeof(w)) != sizeof(w)) {
-            std::cerr << "Error reading edge data from client" << std::endl;
-            close(clientSocket);
-            return;
-        }
-        graph.addEdge(u, v, w);
-    }
+    // for (int i = 0; i < E; ++i) {
+    //     int u, v, w;
+    //     if (read(clientSocket, &u, sizeof(u)) != sizeof(u) ||
+    //         read(clientSocket, &v, sizeof(v)) != sizeof(v) ||
+    //         read(clientSocket, &w, sizeof(w)) != sizeof(w)) {
+    //         std::cerr << "Error reading edge data from client" << std::endl;
+    //         close(clientSocket);
+    //         return;
+    //     }
+        graph.addEdge(0, 1, 11);
+        //graph.addEdge(1, 3, 20);
+        //graph.addEdge(3, 2, 1);
+        //graph.addEdge(2, 4, 3);
+        graph.addEdge(2, 0, 1);
+        graph.addEdge(0, 3, 2);
+        graph.addEdge(2, 3, 9);
+        //graph.addEdge(4, 5, 10);
+        //graph.addEdge(2, 5, 9);
+        
+    // }
+    int algoChoice;
+    read(clientSocket, &algoChoice, sizeof(algoChoice));
+     // Set the MST algorithm type based on the client's choice
+    if (algoChoice == 1) {
+        mstType = MSTType::PRIM;
+        std::cout << "Algo: PRIM " << std::endl;
 
+    } else if (algoChoice == 2) {
+        mstType = MSTType::KRUSKAL;
+        std::cout << "Algo: KRUSKAL " << std::endl;
+    } else {
+        std::cerr << "Invalid algorithm choice, defaulting to Prim's algorithm." << std::endl;
+        mstType = MSTType::PRIM;
+    }
     // Add task to the process AO (Pipeline Stage 2)
     processAO->addTask([this, graph, clientSocket]() {
         processGraph(graph, clientSocket);

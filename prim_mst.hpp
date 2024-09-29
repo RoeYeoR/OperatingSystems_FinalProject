@@ -1,20 +1,18 @@
-#include <vector>
-#include "graph.hpp"
-#include "mst_strategy.hpp"
+#ifndef PRIM_MST_HPP
+#define PRIM_MST_HPP
 
-class PrimMST : public MSTStrategy {
+#include "mst_common.hpp"
+
+class PrimMST : public MSTCommon {
 public:
+    // Implement all the necessary methods
     std::vector<Graph::Edge> solve(const Graph& graph) override;
-    int totalWeight(const Graph& graph) override;
-    int longestDistance(const Graph& graph) override;
-    double averageDistance(const Graph& graph) override;
-    int shortestDistance(const Graph& graph, int u, int v) override;
-    virtual Graph& getGraph(std::vector<Graph::Edge> mst) override; 
-
-private:
-     std::vector<Graph::Edge> mst;
-    std::vector<std::vector<std::pair<int, int>>> mstAdjList; // Adjacency list for MST
-    int dfsLongestPath(int node, std::vector<bool>& visited);
-    int dfsLongestPath(const Graph& graph);
-    int bfsShortestPath(const Graph& graph, int start, int end);
+    Graph& getGraph(std::vector<Graph::Edge> mst) override { return MSTCommon::getGraph(mst); };
+    int totalWeight(const Graph& graph) override { return MSTCommon::totalWeight(graph); }
+    int longestDistance(const Graph& graph) override { return MSTCommon::longestDistance(graph); }
+    double averageDistance(const Graph& graph) override { return MSTCommon::averageDistance(graph); }
+    int shortestDistance(const Graph& graph, int u, int v) override { return MSTCommon::shortestDistance(graph, u, v); }
+    int dijkstraShortestPath(const Graph& graph, int start, int end) override { return MSTCommon::dijkstraShortestPath(graph, start, end); }
 };
+
+#endif // KRUSKAL_MST_HPP

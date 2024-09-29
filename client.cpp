@@ -8,25 +8,35 @@ void sendGraphData(int clientSocket) {
     int V, E;
 
     // Prompt user for number of vertices
-    std::cout << "Enter the number of vertices: ";
-    std::cin >> V;
-    write(clientSocket, &V, sizeof(V));
+    // std::cout << "Enter the number of vertices: ";
+    // std::cin >> V;
+    //write(clientSocket, &V, sizeof(V));
 
     // Prompt user for number of edges
-    std::cout << "Enter the number of edges: ";
-    std::cin >> E;
-    write(clientSocket, &E, sizeof(E));
+    // std::cout << "Enter the number of edges: ";
+    // std::cin >> E;
+    // write(clientSocket, &E, sizeof(E));
+
+    int ver=4;
+    int edges=4;
+    write(clientSocket, &ver, sizeof(ver));
+    write(clientSocket, &edges, sizeof(edges));
+    int algoChoice;
+    std::cout << "Choose algorithm to use for MST (1 for Prim, 2 for Kruskal): ";
+    std::cin >> algoChoice;
+    
+    write(clientSocket, &algoChoice, sizeof(algoChoice));
 
     // Create an array to store edges
-    for (int i = 0; i < E; ++i) {
-        int u, v, w;
-        std::cout << "Set edge and it's weight (template: src dest weight) number " << (i + 1) << ": ";
-        std::cin >> u >> v >> w;
+    // for (int i = 0; i < E; ++i) {
+    //     int u, v, w;
+    //     std::cout << "Set edge and it's weight (template: src dest weight) number " << (i + 1) << ": ";
+    //     std::cin >> u >> v >> w;
 
-        write(clientSocket, &u, sizeof(int));
-        write(clientSocket, &v, sizeof(int));
-        write(clientSocket, &w, sizeof(int));
-    }
+    //     write(clientSocket, &u, sizeof(int));
+    //     write(clientSocket, &v, sizeof(int));
+    //     write(clientSocket, &w, sizeof(int));
+    // }
 }
 
 void receiveResults(int clientSocket) {
