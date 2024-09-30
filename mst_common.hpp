@@ -5,7 +5,11 @@
 #include <vector>
 #include <queue>
 #include <climits>
-
+#include <iostream>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 class MSTCommon : public MSTStrategy {
 public:
     std::vector<Graph::Edge> mst;
@@ -100,6 +104,16 @@ int shortestDistance(const Graph& graph, int u, int v) {
     return dijkstraShortestPath(graph, u, v);
 }
 int dijkstraShortestPath(const Graph& graph, int start, int end) {
+    // Edge case: Check if the start and end vertices are the same
+    if (start == end) return 0;
+
+    // Edge case: Validate that the vertices are within the valid range
+    int V = graph.getVertices();
+    if (start < 0 || start >= V || end < 0 || end >= V) {
+        std::cerr << "Error: One or both vertices are not valid." << std::endl;
+        return -1;
+    }
+
     std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, std::greater<>> pq; // Min-heap priority queue
     std::vector<int> distances(graph.getVertices(), INT_MAX); // Vector to store shortest distances
     std::vector<bool> visited(graph.getVertices(), false);
@@ -115,6 +129,7 @@ int dijkstraShortestPath(const Graph& graph, int start, int end) {
         if (visited[node]) continue;
         visited[node] = true;
 
+        // Process all neighbors of the current node
         for (const auto& edge : graph.getEdgesFromNode(node)) {
             int nextNode = edge.dest; // Use edge's destination
             int weight = edge.weight;  // Use edge's weight
