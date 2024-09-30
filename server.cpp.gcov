@@ -1,0 +1,449 @@
+        -:    0:Source:server.cpp
+        -:    0:Graph:obj/server.gcno
+        -:    0:Data:obj/server.gcda
+        -:    0:Runs:0
+        -:    1:#include "server.hpp"
+        -:    2:#include "active_object.hpp"
+        -:    3:#include "mst_factory.hpp"
+        -:    4:#include "graph.hpp"
+        -:    5:#include <iostream>
+        -:    6:#include <cstring>
+        -:    7:#include <unistd.h>
+        -:    8:#include <thread>
+        -:    9:
+        -:   10:   
+        -:   11:// Constructor
+    #####:   12:Server::Server(int port, MSTType mstType)
+    #####:   13:    : port(port), mstType(mstType), running(false), stopThreads(false), isLeader(false), currentLeaderSocket(-1) {
+    #####:   14:    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    #####:   15:    if (serverSocket == -1) {
+    #####:   16:        throw std::runtime_error("Failed to create socket");
+        -:   17:    }
+        -:   18:
+        -:   19:    sockaddr_in serverAddr;
+    #####:   20:    serverAddr.sin_family = AF_INET;
+    #####:   21:    serverAddr.sin_port = htons(port);
+    #####:   22:    serverAddr.sin_addr.s_addr = INADDR_ANY;
+        -:   23:
+    #####:   24:    if (bind(serverSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    #####:   25:        throw std::runtime_error("Failed to bind socket");
+        -:   26:    }
+        -:   27:
+    #####:   28:    if (listen(serverSocket, SOMAXCONN) == -1) {
+    #####:   29:        throw std::runtime_error("Failed to listen on socket");
+        -:   30:    }
+        -:   31:
+        -:   32:    // Initialize Active Objects for Pipeline stages
+    #####:   33:    readAO = new ActiveObject();
+    #####:   34:    processAO = new ActiveObject();
+    #####:   35:    sendAO = new ActiveObject();
+    #####:   36:}
+        -:   37:
+        -:   38:// Destructor
+    #####:   39:Server::~Server() {
+    #####:   40:    stop();
+    #####:   41:    close(serverSocket);
+        -:   42:
+    #####:   43:    delete readAO;
+    #####:   44:    delete processAO;
+    #####:   45:    delete sendAO;
+    #####:   46:}
+        -:   47:
+    #####:   48:void Server::start() {
+    #####:   49:    running = true;
+        -:   50:
+        -:   51:    // Start thread pool
+    #####:   52:    unsigned int threadCount = std::thread::hardware_concurrency();
+    #####:   53:    for (unsigned int i = 0; i < threadCount; ++i) {
+    #####:   54:        threadPool.emplace_back(&Server::threadWorker, this);
+        -:   55:    }
+        -:   56:
+        -:   57:    // Start initial leader thread
+    #####:   58:    promoteToLeader(0);
+        -:   59:
+    #####:   60:    std::cout << "[Thread " << std::this_thread::get_id() << "] Server is running on port " << port << std::endl;
+    #####:   61:}
+        -:   62:
+        -:   63:// Read the graph from client (Stage 1)
+    #####:   64:void Server::readGraphFromClient(int clientSocket) {
+        -:   65:    int V;
+    #####:   66:    read(clientSocket, &V, sizeof(V));
+    #####:   67:    std::cout << "Number o  f vertices received from client: " << V << std::endl;
+    #####:   68:    Graph graph(V);
+        -:   69:    int E;
+    #####:   70:    read(clientSocket, &E, sizeof(E));
+    #####:   71:    std::cout << "Number of edges received from client: " << E << std::endl;
+    #####:   72:    for (int i = 0; i < E; ++i) 
+        -:   73:    {
+        -:   74:        int u, v, w;
+    #####:   75:        if (read(clientSocket, &u, sizeof(u)) != sizeof(u) ||
+    #####:   76:            read(clientSocket, &v, sizeof(v)) != sizeof(v) ||
+    #####:   77:            read(clientSocket, &w, sizeof(w)) != sizeof(w)) {
+    #####:   78:            std::cerr << "Error reading edge data from client" << std::endl;
+    #####:   79:            close(clientSocket);
+    #####:   80:            return;
+        -:   81:        }
+    #####:   82:        graph.addEdge(u, v, w);
+    #####:   83:        std::cout << "[Thread " << std::this_thread::get_id() << "] Added Edge: u=" << u<<" v="<<v<<" w="<<w << std::endl;
+        -:   84:
+        -:   85:        // graph.addEdge(0, 1, 11);
+        -:   86:        // graph.addEdge(2, 0, 1);
+        -:   87:        // graph.addEdge(0, 3, 2);
+        -:   88:        // graph.addEdge(2, 3, 9);
+        -:   89:
+        -:   90:        //graph.addEdge(1, 3, 20);
+        -:   91:        //graph.addEdge(3, 2, 1);
+        -:   92:        //graph.addEdge(2, 4, 3);
+        -:   93:        //graph.addEdge(4, 5, 10);
+        -:   94:        //graph.addEdge(2, 5, 9);
+        -:   95:        
+        -:   96:    }
+        -:   97:char algoChoiceBuffer[10];  // Small buffer since we expect only "Prim" or "Kruskal"
+        -:   98:
+        -:   99:// Receive the algorithm choice from the client
+    #####:  100:std::cout << "Receiving MST algorithm choice from client socket: " << clientSocket << std::endl;
+    #####:  101:ssize_t result = recv(clientSocket, algoChoiceBuffer, sizeof(algoChoiceBuffer), 0);
+    #####:  102:if (result <= 0) {
+    #####:  103:    std::cerr << "Failed to receive MST algorithm choice." << std::endl;
+    #####:  104:    close(clientSocket);
+    #####:  105:    return;
+        -:  106:}
+        -:  107:
+        -:  108:// Null-terminate the received string
+    #####:  109:algoChoiceBuffer[result] = '\0';  // Ensure the string is null-terminated
+        -:  110:
+        -:  111:// Now compare the received string to select the algorithm
+    #####:  112:std::string algoChoice(algoChoiceBuffer);
+        -:  113:MSTType clientMSTType;
+        -:  114:
+    #####:  115:if (algoChoice == "Prim") {
+    #####:  116:    clientMSTType = MSTType::PRIM;
+    #####:  117:    std::cout << "Client chose Prim's algorithm." << std::endl;
+    #####:  118:} else if (algoChoice == "Kruskal") {
+    #####:  119:    clientMSTType = MSTType::KRUSKAL;
+    #####:  120:    std::cout << "Client chose Kruskal's algorithm." << std::endl;
+        -:  121:} else {
+    #####:  122:    std::cerr << "Invalid MST algorithm choice received from client." << std::endl;
+    #####:  123:    close(clientSocket);  // Close the connection on error
+    #####:  124:    return;
+        -:  125:}
+    #####:  126:  std::cout << "[Thread " << std::this_thread::get_id() << "] Preparing to add task to processAO queue for client socket: " << clientSocket << std::endl;
+        -:  127:
+    #####:  128:processAO->addTask([this, graph = graph, clientMSTType, clientSocket]() {
+    #####:  129:    std::cout << "[Thread " << std::this_thread::get_id() << "] Task for processGraph added to processAO queue for client socket: " << clientSocket << std::endl;
+    #####:  130:    processGraph(graph, clientMSTType, clientSocket);
+    #####:  131:});
+    #####:  132:std::cout << "[Thread " << std::this_thread::get_id() << "] Task successfully added to processAO queue for client socket: " << clientSocket << std::endl;
+    #####:  133:}
+        -:  134:
+        -:  135:// Process the graph and calculate the MST and additional metrics (Stage 2)
+    #####:  136:void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clientSocket) {
+    #####:  137:    std::cout << "process graph "  << std::endl;
+        -:  138:
+    #####:  139:    std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(initialMSTType);
+    #####:  140:    Graph mst = mstSolver->getGraph(mstSolver->solve(graph));
+    #####:  141:    int totalWeight = mstSolver->totalWeight(mst);
+    #####:  142:    int longestDistance = mstSolver->longestDistance(mst);
+    #####:  143:    double averageDistance = mstSolver->averageDistance(mst);
+        -:  144:
+        -:  145:    // Send initial MST metrics to the client
+    #####:  146:    sendAO->addTask([this, totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType]() {
+    #####:  147:    std::cout << "[Thread " << std::this_thread::get_id() << "] Sending MST metrics to client socket: " << clientSocket << std::endl;
+    #####:  148:    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType);
+    #####:  149:});
+        -:  150:
+    #####:  151:    bool clientActive = true;
+    #####:  152:    while (clientActive && running) {
+        -:  153:        int command;
+    #####:  154:        ssize_t commandRead = read(clientSocket, &command, sizeof(command));
+        -:  155:
+    #####:  156:        if (commandRead <= 0) {
+    #####:  157:            std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read command from client socket: " << clientSocket << std::endl;
+    #####:  158:            break;
+        -:  159:        }
+        -:  160:
+    #####:  161:        std::cout << "[Thread " << std::this_thread::get_id() << "] Command received: " << command << " from client socket: " << clientSocket << std::endl;
+        -:  162:
+    #####:  163:        switch (command) {
+    #####:  164:            case 1: { // Change MST algorithm
+        -:  165:                int algoChoice;
+    #####:  166:                if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
+    #####:  167:                    std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read algorithm choice from client socket: " << clientSocket << std::endl;
+    #####:  168:                    clientActive = false;
+    #####:  169:                    break;
+        -:  170:                }
+        -:  171:
+    #####:  172:                MSTType newMSTType = (algoChoice == 2) ? MSTType::KRUSKAL : MSTType::PRIM;
+        -:  173:                std::cout << "[Thread " << std::this_thread::get_id() << "] Changing MST algorithm to " 
+    #####:  174:                          << (newMSTType == MSTType::PRIM ? "Prim" : "Kruskal") << " for client socket: " << clientSocket << std::endl;
+        -:  175:
+        -:  176:                // Recompute MST with the new algorithm
+    #####:  177:                mstSolver = MSTFactory::createMST(newMSTType);
+    #####:  178:                mst = mstSolver->getGraph(mstSolver->solve(graph));
+    #####:  179:                totalWeight = mstSolver->totalWeight(mst);
+    #####:  180:                longestDistance = mstSolver->longestDistance(mst);
+    #####:  181:                averageDistance = mstSolver->averageDistance(mst);
+        -:  182:
+        -:  183:                // Send the updated MST metrics after changing algorithm
+    #####:  184:                sendAO->addTask([this, totalWeight, longestDistance, averageDistance, clientSocket, newMSTType]() {
+    #####:  185:                    std::cout << "[Thread " << std::this_thread::get_id() << "] Sending updated MST metrics to client socket: " << clientSocket << std::endl;
+    #####:  186:                    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
+    #####:  187:                });
+    #####:  188:                break;
+        -:  189:            }
+    #####:  190:            case 2: { // Calculate and send the shortest distance between two vertices
+        -:  191:                int u, v;
+    #####:  192:                if (read(clientSocket, &u, sizeof(u)) <= 0 || read(clientSocket, &v, sizeof(v)) <= 0) {
+    #####:  193:                    std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read vertices from client socket: " << clientSocket << std::endl;
+    #####:  194:                    clientActive = false;
+    #####:  195:                    break;
+        -:  196:                }
+        -:  197:
+    #####:  198:                std::cout << "[Thread " << std::this_thread::get_id() << "] Calculating shortest distance between " << u << " and " << v << " for client socket: " << clientSocket << std::endl;
+        -:  199:
+    #####:  200:                int shortestDistance = mstSolver->shortestDistance(mst, u, v);
+        -:  201:                
+    #####:  202:                sendAO->addTask([this, shortestDistance, clientSocket]() {
+    #####:  203:                    std::cout << "[Thread " << std::this_thread::get_id() << "] Sending shortest distance to client socket: " << clientSocket << std::endl;
+    #####:  204:                    write(clientSocket, &shortestDistance, sizeof(shortestDistance));
+    #####:  205:                });
+    #####:  206:                break;
+        -:  207:            }
+    #####:  208:            case 3: // Exit command
+    #####:  209:                std::cout << "[Thread " << std::this_thread::get_id() << "] Client requested to close the connection (socket: " << clientSocket << ")" << std::endl;
+    #####:  210:                clientActive = false;
+    #####:  211:                break;
+    #####:  212:            default:
+    #####:  213:                std::cerr << "[Thread " << std::this_thread::get_id() << "] Invalid command received from client socket: " << clientSocket << std::endl;
+    #####:  214:                clientActive = false;
+    #####:  215:                break;
+        -:  216:        }
+        -:  217:    }
+        -:  218:
+    #####:  219:    std::cout << "[Thread " << std::this_thread::get_id() << "] Closing client socket: " << clientSocket << std::endl;
+        -:  220:    // Close the socket after all commands are processed
+    #####:  221:    close(clientSocket);
+    #####:  222:}
+        -:  223:// Send MST metrics to the client
+    #####:  224:void Server::sendMSTMetricsToClient(int totalWeight, int longestDistance, double averageDistance, int clientSocket, MSTType mstType) {
+    #####:  225:    std::string algoName = (mstType == MSTType::PRIM) ? "Prim" : "Kruskal";
+    #####:  226:    int algoNameLength = algoName.size();
+        -:  227:    
+    #####:  228:    std::cout << "[Thread " << std::this_thread::get_id() << "] Preparing to send MST metrics to client socket: " << clientSocket << std::endl;
+        -:  229:
+        -:  230:    // Send algorithm name length
+    #####:  231:    ssize_t result = write(clientSocket, &algoNameLength, sizeof(algoNameLength));
+    #####:  232:    if (result <= 0) {
+    #####:  233:        std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send algoNameLength" << std::endl;
+    #####:  234:        return;
+        -:  235:    }
+    #####:  236:    std::cout << "Sending algoNameLength to client: " << clientSocket << std::endl;
+        -:  237:    
+        -:  238:
+        -:  239:    // Send algorithm name
+    #####:  240:    result = write(clientSocket, algoName.c_str(), algoNameLength);
+    #####:  241:    if (result <= 0) {
+    #####:  242:        std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send algoName" << std::endl;
+    #####:  243:        return;
+        -:  244:    }
+    #####:  245:    std::cout << "[Thread " << std::this_thread::get_id() << "] Sent algoName: " << algoName << std::endl;
+        -:  246:
+        -:  247:    // Send total weight
+    #####:  248:    result = write(clientSocket, &totalWeight, sizeof(totalWeight));
+    #####:  249:    if (result <= 0) {
+    #####:  250:        std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send totalWeight" << std::endl;
+    #####:  251:        return;
+        -:  252:    }
+    #####:  253:    std::cout << "[Thread " << std::this_thread::get_id() << "] Sent totalWeight" << std::endl;
+        -:  254:
+        -:  255:    // Send longest distance
+    #####:  256:    result = write(clientSocket, &longestDistance, sizeof(longestDistance));
+    #####:  257:    if (result <= 0) {
+    #####:  258:        std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send longestDistance" << std::endl;
+    #####:  259:        return;
+        -:  260:    }
+    #####:  261:    std::cout << "[Thread " << std::this_thread::get_id() << "] Sent longestDistance" << std::endl;
+        -:  262:
+        -:  263:    // Send average distance
+    #####:  264:    result = write(clientSocket, &averageDistance, sizeof(averageDistance));
+    #####:  265:    if (result <= 0) {
+    #####:  266:        std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to send averageDistance" << std::endl;
+    #####:  267:        return;
+        -:  268:    }
+    #####:  269:    std::cout << "[Thread " << std::this_thread::get_id() << "] Sent averageDistance" << std::endl;
+    #####:  270:}
+        -:  271:
+        -:  272:// Send the results to the client (Stage 3)
+    #####:  273:void Server::sendResultToClient(const Graph& mst, int totalWeight, int longestDistance, double averageDistance, int clientSocket, MSTType chosenMSTType) {
+    #####:  274:    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, chosenMSTType);
+        -:  275:
+    #####:  276:    bool clientActive = true;
+    #####:  277:    while (clientActive && running) {
+        -:  278:        int command;
+    #####:  279:        ssize_t commandRead = read(clientSocket, &command, sizeof(command));
+        -:  280:
+    #####:  281:        if (commandRead <= 0) {
+    #####:  282:            std::cerr << "Failed to read command from client, closing connection." << std::endl;
+    #####:  283:            break;
+        -:  284:        }
+        -:  285:
+    #####:  286:        switch (command) {
+    #####:  287:            case 1: // Change MST algorithm
+    #####:  288:                handleChangeAlgorithm(mst, clientSocket);
+    #####:  289:                break;
+    #####:  290:            case 2: // Calculate shortest distance
+    #####:  291:                handleShortestDistance(mst, clientSocket);
+    #####:  292:                break;
+    #####:  293:            case 3: // Exit
+    #####:  294:                std::cout << "[Thread " << std::this_thread::get_id() << "] Client requested to close the connection." << std::endl;
+    #####:  295:                clientActive = false;
+    #####:  296:                break;
+    #####:  297:            default:
+    #####:  298:                std::cerr << "Invalid command received from client." << std::endl;
+    #####:  299:                clientActive = false;
+    #####:  300:                break;
+        -:  301:        }
+        -:  302:    }
+        -:  303:
+    #####:  304:    close(clientSocket);
+    #####:  305:}
+    #####:  306:void Server::handleChangeAlgorithm(const Graph& originalGraph, int clientSocket) {
+        -:  307:    int algoChoice;
+    #####:  308:    if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
+    #####:  309:        std::cerr << "Error reading new algorithm choice from client" << std::endl;
+    #####:  310:        return;
+        -:  311:    }
+        -:  312:
+    #####:  313:    MSTType newMSTType = (algoChoice == 2) ? MSTType::KRUSKAL : MSTType::PRIM;
+        -:  314:    
+        -:  315:    // Recompute MST with the new algorithm
+    #####:  316:    auto mstSolver = MSTFactory::createMST(newMSTType);
+    #####:  317:    Graph newMST = mstSolver->getGraph(mstSolver->solve(originalGraph));
+    #####:  318:    int totalWeight = mstSolver->totalWeight(newMST);
+    #####:  319:    int longestDistance = mstSolver->longestDistance(newMST);
+    #####:  320:    double averageDistance = mstSolver->averageDistance(newMST);
+        -:  321:
+    #####:  322:    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
+    #####:  323:}
+    #####:  324:void Server::handleShortestDistance(const Graph& mst, int clientSocket) {
+        -:  325:    int u, v;
+    #####:  326:    if (read(clientSocket, &u, sizeof(u)) <= 0 || read(clientSocket, &v, sizeof(v)) <= 0) {
+    #####:  327:        std::cerr << "Error reading vertices for shortest distance calculation" << std::endl;
+    #####:  328:        return;
+        -:  329:    }
+        -:  330:
+    #####:  331:    auto mstSolver = MSTFactory::createMST(mstType);  // Use the current MST type
+    #####:  332:    int shortestDistance = mstSolver->shortestDistance(mst, u, v);
+    #####:  333:    write(clientSocket, &shortestDistance, sizeof(shortestDistance));
+    #####:  334:}
+        -:  335:
+        -:  336:
+        -:  337:// Leader thread that accepts connections (Leader-Follower Pattern)
+    #####:  338:void Server::leaderWorker() {
+    #####:  339:    while (running) {
+        -:  340:        sockaddr_in clientAddr;
+    #####:  341:        socklen_t clientSize = sizeof(clientAddr);
+    #####:  342:        int clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientSize);
+        -:  343:
+    #####:  344:        if (clientSocket == -1) {
+    #####:  345:            if (!running) break;  // Server is shutting down
+    #####:  346:            std::cerr << "Failed to accept client connection" << std::endl;
+    #####:  347:            continue;
+        -:  348:        }
+        -:  349:
+    #####:  350:        std::cout << "[Leader Thread " << std::this_thread::get_id() << "] Accepted connection from client socket: " << clientSocket << std::endl;
+        -:  351:
+        -:  352:        // Add task to read from client and pass the client socket to the read active object
+    #####:  353:        readAO->addTask([this, clientSocket]() {
+    #####:  354:            readGraphFromClient(clientSocket);
+    #####:  355:        });
+        -:  356:
+        -:  357:        // Demote current leader to follower and promote a new leader
+    #####:  358:        demoteToFollower();
+    #####:  359:        promoteToLeader((currentLeaderSocket + 1) % threadPool.size());
+        -:  360:
+        -:  361:        // Join the follower pool
+    #####:  362:        threadWorker();
+        -:  363:    }
+    #####:  364:}
+        -:  365:// Worker threads process tasks
+    #####:  366:void Server::threadWorker() {
+    #####:  367:    while (!stopThreads) {
+    #####:  368:        if (isLeader.load()) {
+    #####:  369:            leaderWorker();
+        -:  370:        } else {
+    #####:  371:            std::function<void()> task;
+        -:  372:
+        -:  373:            {
+    #####:  374:                std::unique_lock<std::mutex> lock(queueMutex);
+    #####:  375:                condition.wait(lock, [this]() { return !taskQueue.empty() || stopThreads || isLeader.load(); });
+        -:  376:
+    #####:  377:                if (stopThreads && taskQueue.empty()) {
+    #####:  378:                    return;
+        -:  379:                }
+        -:  380:
+    #####:  381:                if (isLeader.load()) {
+    #####:  382:                    continue;  // Skip to next iteration to enter leaderWorker()
+        -:  383:                }
+        -:  384:
+    #####:  385:                if (!taskQueue.empty()) {
+    #####:  386:                    task = std::move(taskQueue.front());
+    #####:  387:                    taskQueue.pop();
+        -:  388:                }
+    #####:  389:            }
+        -:  390:
+    #####:  391:            if (task) {
+    #####:  392:                std::cout << "[Worker Thread " << std::this_thread::get_id() << "] Executing task" << std::endl;
+    #####:  393:                task();
+        -:  394:            }
+    #####:  395:        }
+        -:  396:    }
+        -:  397:}
+        -:  398:
+    #####:  399:void Server::promoteToLeader(int threadId) {
+    #####:  400:    std::unique_lock<std::mutex> lock(leaderMutex);
+    #####:  401:    currentLeaderSocket = threadId;
+    #####:  402:    isLeader.store(true);
+    #####:  403:    std::cout << "[Thread " << std::this_thread::get_id() << "] Promoted to leader" << std::endl;
+    #####:  404:    leaderPromotionCV.notify_all();
+    #####:  405:}
+        -:  406:
+    #####:  407:void Server::demoteToFollower() {
+    #####:  408:    std::unique_lock<std::mutex> lock(leaderMutex);
+    #####:  409:    isLeader.store(false);
+    #####:  410:    std::cout << "[Thread " << std::this_thread::get_id() << "] Demoted to follower" << std::endl;
+    #####:  411:}
+        -:  412:
+    #####:  413:void Server::stop() {
+    #####:  414:    running = false;
+    #####:  415:    stopThreads = true;
+        -:  416:    
+    #####:  417:    condition.notify_all();
+    #####:  418:    leaderPromotionCV.notify_all();
+        -:  419:
+    #####:  420:    for (auto& thread : threadPool) {
+    #####:  421:        if (thread.joinable()) {
+    #####:  422:            thread.join();
+        -:  423:        }
+        -:  424:    }
+        -:  425:
+    #####:  426:    readAO->stop();
+    #####:  427:    processAO->stop();
+    #####:  428:    sendAO->stop();
+    #####:  429:}
+    #####:  430:int main() {
+        -:  431:    try {
+    #####:  432:        Server server(8082, MSTType::PRIM);
+    #####:  433:        server.start();
+        -:  434:
+    #####:  435:        std::cout << "Server started. Press Enter to stop the server." << std::endl;
+    #####:  436:        std::cin.get();
+        -:  437:
+    #####:  438:        server.stop();
+    #####:  439:    } catch (const std::exception& e) {
+    =====:  440:        std::cerr << "Error: " << e.what() << std::endl;
+    =====:  441:        return 1;
+    =====:  442:    }
+        -:  443:
+    #####:  444:    return 0;
+        -:  445:}

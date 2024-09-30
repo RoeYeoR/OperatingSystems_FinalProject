@@ -21,6 +21,11 @@ public:
     void stop();
 
 private:
+    std::atomic<bool> isLeader;
+    std::atomic<int> currentLeaderSocket;
+    std::condition_variable leaderPromotionCV;
+
+    
     // Methods for pipeline stages
     void readGraphFromClient(int clientSocket); // Stage 1
     void processGraph( const Graph& graph, MSTType initialMSTType, int clientSocket);//Stage 2
@@ -32,6 +37,8 @@ private:
     void threadWorker();  // Worker threads to process tasks
     void handleChangeAlgorithm(const Graph& originalGraph, int clientSocket);
     void handleShortestDistance(const Graph& mst, int clientSocket) ;
+    void demoteToFollower() ;
+    void promoteToLeader(int threadId) ;
 
     // Server properties
     int serverSocket;
