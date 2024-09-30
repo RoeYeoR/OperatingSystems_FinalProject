@@ -1,0 +1,202 @@
+        -:    0:Source:client.cpp
+        -:    0:Graph:obj/client.gcno
+        -:    0:Data:obj/client.gcda
+        -:    0:Runs:2
+        -:    1:#include <iostream>
+        -:    2:#include <sys/socket.h>
+        -:    3:#include <netinet/in.h>
+        -:    4:#include <arpa/inet.h>
+        -:    5:#include <unistd.h>
+        5:    6:void receiveMSTMetrics(int clientSocket) {
+        -:    7:    //First receive the length of the algorithm name
+        -:    8:    int algoNameLength;
+        5:    9:    std::cout << "Waiting to receive algoNameLength..." << std::endl;
+        5:   10:    ssize_t result = read(clientSocket, &algoNameLength, sizeof(algoNameLength));
+        5:   11:    if (result <= 0) {
+    #####:   12:        std::cerr << "Failed to receive algoNameLength." << std::endl;
+    #####:   13:        return;
+        -:   14:    }
+        5:   15:    std::cout << "Received algoNameLength: " << algoNameLength << std::endl;
+        -:   16:
+        -:   17:    // Allocate a buffer to hold the algorithm name
+        5:   18:    char* algoName = new char[algoNameLength + 1];
+        5:   19:    result = read(clientSocket, algoName, algoNameLength);
+        5:   20:    if (result <= 0) {
+    #####:   21:        std::cerr << "Failed to receive algoName." << std::endl;
+    #####:   22:        delete[] algoName;
+    #####:   23:        return;
+        -:   24:    }
+        5:   25:    algoName[algoNameLength] = '\0';  // Null-terminate the string
+        5:   26:    std::cout << "Algorithm used for MST: " << algoName << std::endl;
+        -:   27:
+        -:   28:    //Receive the MST metrics
+        -:   29:    int totalWeight;
+        5:   30:    result = read(clientSocket, &totalWeight, sizeof(totalWeight));
+        5:   31:    if (result <= 0) {
+    #####:   32:        std::cerr << "Failed to receive totalWeight." << std::endl;
+    #####:   33:        delete[] algoName;
+    #####:   34:        return;
+        -:   35:    }
+        5:   36:    std::cout << "Total weight of MST: " << totalWeight << std::endl;
+        -:   37:
+        -:   38:    int longestDistance;
+        5:   39:    result = read(clientSocket, &longestDistance, sizeof(longestDistance));
+        5:   40:    if (result <= 0) {
+    #####:   41:        std::cerr << "Failed to receive longestDistance." << std::endl;
+    #####:   42:        delete[] algoName;
+    #####:   43:        return;
+        -:   44:    }
+        5:   45:    std::cout << "Longest distance between two vertices: " << longestDistance << std::endl;
+        -:   46:
+        -:   47:    double averageDistance;
+        5:   48:    result = read(clientSocket, &averageDistance, sizeof(averageDistance));
+        5:   49:    if (result <= 0) {
+    #####:   50:        std::cerr << "Failed to receive averageDistance." << std::endl;
+    #####:   51:        delete[] algoName;
+    #####:   52:        return;
+        -:   53:    }
+        5:   54:    std::cout << "Average distance between vertices: " << averageDistance << std::endl;
+        -:   55:
+        5:   56:    delete[] algoName;
+        -:   57:}
+        2:   58:void sendGraphData(int clientSocket) {
+        -:   59:    int V, E;
+        -:   60:
+        -:   61:    //Prompt user for number of vertices
+        2:   62:    std::cout << "Enter the number of vertices: ";
+        2:   63:    std::cin >> V;
+        2:   64:    write(clientSocket, &V, sizeof(V));
+        -:   65:
+        -:   66:    //Prompt user for number of edges
+        2:   67:    std::cout << "Enter the number of edges: ";
+        2:   68:    std::cin >> E;
+        2:   69:    write(clientSocket, &E, sizeof(E));
+        -:   70:
+        -:   71:    // int ver=4;
+        -:   72:    // int edges=4;
+        -:   73:    // write(clientSocket, &ver, sizeof(ver));
+        -:   74:    // write(clientSocket, &edges, sizeof(edges));
+        -:   75:    
+        -:   76:
+        -:   77:    // Receive the MST metrics
+        -:   78:
+        -:   79:    // Create an array to store edges
+        8:   80:    for (int i = 0; i < E; ++i) {
+        -:   81:        int u, v, w;
+        6:   82:        std::cout << "Set edge and it's weight (template: src dest weight) number " << (i + 1) << ": ";
+        6:   83:        std::cin >> u >> v >> w;
+        -:   84:
+        6:   85:        write(clientSocket, &u, sizeof(int));
+        6:   86:        write(clientSocket, &v, sizeof(int));
+        6:   87:        write(clientSocket, &w, sizeof(int));
+        -:   88:    }
+        -:   89:    // Get the MST algorithm choice from the user.
+        2:   90:std::string algoChoice;
+        2:   91:std::cout << "Choose MST algorithm (Prim/Kruskal): ";
+        2:   92:std::cin >> algoChoice;
+        -:   93:
+        -:   94:// Send the algorithm choice to the server.
+        2:   95:std::cout << "Sending MST algorithm choice to the server: " << algoChoice << std::endl;
+        2:   96:ssize_t result = send(clientSocket, algoChoice.c_str(), algoChoice.size(), 0);
+        2:   97:if (result == -1) {
+    #####:   98:    std::cerr << "Failed to send MST algorithm choice." << std::endl;
+    #####:   99:    return;
+        -:  100:}
+        2:  101:    receiveMSTMetrics(clientSocket);
+        2:  102:}
+        -:  103:
+        -:  104:
+    #####:  105:void calculateShortestDistance(int clientSocket) {
+        -:  106:    int u, v;
+    #####:  107:    std::cout << "Enter two vertices (u and v) for shortest distance: ";
+    #####:  108:    std::cin >> u >> v;
+        -:  109:
+        -:  110:    // Send the vertices to the server
+    #####:  111:    if (write(clientSocket, &u, sizeof(u)) == -1 || write(clientSocket, &v, sizeof(v)) == -1) {
+    #####:  112:        std::cerr << "Failed to send vertices to server." << std::endl;
+    #####:  113:        return;
+        -:  114:    }
+        -:  115:
+        -:  116:    // Receive the shortest distance from the server
+        -:  117:    int shortestDistance;
+    #####:  118:    if (read(clientSocket, &shortestDistance, sizeof(shortestDistance)) == -1) {
+    #####:  119:        std::cerr << "Failed to receive shortest distance from server." << std::endl;
+    #####:  120:        return;
+        -:  121:    }
+        -:  122:
+        -:  123:    // Handle edge cases based on the server response
+    #####:  124:    if (shortestDistance == -1) {
+    #####:  125:        std::cout << "Error: Invalid vertices or no path between vertices " << u << " and " << v << "." << std::endl;
+        -:  126:    } else {
+    #####:  127:        std::cout << "Shortest distance between vertices " << u << " and " << v << ": " << shortestDistance << std::endl;
+        -:  128:    }
+        -:  129:}
+    #####:  130:void receiveResults(int clientSocket) {
+        -:  131:    // Receive MST metrics after graph submission or algorithm change
+    #####:  132:    receiveMSTMetrics(clientSocket);
+        -:  133:
+        -:  134:    int shortestDistance;
+        -:  135:    int u, v; // Specify the vertices for the shortest path
+    #####:  136:    std::cout << "Enter two vertices (u and v) for shortest distance: ";
+    #####:  137:    std::cin >> u >> v;
+    #####:  138:    write(clientSocket, &u, sizeof(u));
+    #####:  139:    write(clientSocket, &v, sizeof(v));
+    #####:  140:    read(clientSocket, &shortestDistance, sizeof(shortestDistance));
+    #####:  141:    std::cout << "Shortest distance between vertices " << u << " and " << v << ": " << shortestDistance << std::endl;
+    #####:  142:}
+        2:  143:int main() {
+        2:  144:    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+        2:  145:    if (clientSocket == -1) {
+    #####:  146:        std::cerr << "Failed to create socket" << std::endl;
+    #####:  147:        return -1;
+        -:  148:    }
+        -:  149:
+        -:  150:    sockaddr_in serverAddr;
+        2:  151:    serverAddr.sin_family = AF_INET;
+        2:  152:    serverAddr.sin_port = htons(8082);
+        2:  153:    inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
+        -:  154:
+        2:  155:    if (connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == -1) {
+    #####:  156:        std::cerr << "Failed to connect to server" << std::endl;
+    #####:  157:        return -1;
+        -:  158:    }
+        -:  159:
+        -:  160:    // Send the graph data to the server and receive the MST metrics
+        2:  161:    sendGraphData(clientSocket);
+        -:  162:
+        -:  163:    while (true) {
+        -:  164:    int choice;
+       10:  165:    std::cout << "Choose an option: \n1. Change MST Algorithm\n2. Calculate new shortest distance\n3. Exit\n";
+       10:  166:    std::cin >> choice;
+        -:  167:
+        -:  168:    // Send the command to the server
+       10:  169:    write(clientSocket, &choice, sizeof(choice));
+        -:  170:
+       10:  171:    if (choice == 3) {
+        2:  172:        std::cout << "Exiting..." << std::endl;
+        2:  173:        break;
+        -:  174:    }
+        8:  175:    else if (choice == 1) {
+        -:  176:        // Change MST Algorithm
+        -:  177:        int algoChoice;
+        3:  178:        std::cout << "Choose algorithm to use for MST (1 for Prim, 2 for Kruskal): ";
+        3:  179:        std::cin >> algoChoice;
+        3:  180:        write(clientSocket, &algoChoice, sizeof(algoChoice));
+        -:  181:
+        -:  182:        // Expect updated MST metrics from the server
+        3:  183:        receiveMSTMetrics(clientSocket);
+        -:  184:    }
+        5:  185:    else if (choice == 2) {
+        -:  186:        // Calculate new shortest distance
+        -:  187:        int u, v;
+        5:  188:        std::cout << "Enter two vertices (u and v) for shortest distance: ";
+        5:  189:        std::cin >> u >> v;
+        5:  190:        write(clientSocket, &u, sizeof(u));
+        5:  191:        write(clientSocket, &v, sizeof(v));
+        -:  192:
+        -:  193:        int shortestDistance;
+        5:  194:        read(clientSocket, &shortestDistance, sizeof(shortestDistance));
+        5:  195:        std::cout << "Shortest distance between vertices " << u << " and " << v << ": " << shortestDistance << std::endl;
+        -:  196:    }
+        8:  197:}
+        2:  198:}

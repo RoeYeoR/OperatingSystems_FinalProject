@@ -7,9 +7,10 @@
 #include <unistd.h>
 #include <thread>
 
+   
 // Constructor
 Server::Server(int port, MSTType mstType)
-    : port(port), mstType(mstType), running(false), stopThreads(false), leaderAvailable(true) {
+    : port(port), mstType(mstType), running(false), stopThreads(false), isLeader(false), currentLeaderSocket(-1) {
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == -1) {
         throw std::runtime_error("Failed to create socket");
@@ -53,8 +54,8 @@ void Server::start() {
         threadPool.emplace_back(&Server::threadWorker, this);
     }
 
-    // Start leader thread
-    leaderThread = std::thread(&Server::leaderWorker, this);
+    // Start initial leader thread
+    promoteToLeader(0);
 
     std::cout << "[Thread " << std::this_thread::get_id() << "] Server is running on port " << port << std::endl;
 }
@@ -331,31 +332,7 @@ void Server::handleShortestDistance(const Graph& mst, int clientSocket) {
     int shortestDistance = mstSolver->shortestDistance(mst, u, v);
     write(clientSocket, &shortestDistance, sizeof(shortestDistance));
 }
-void Server::stop() {
-    running = false;
 
-    // Stop the thread pool
-    {
-        std::unique_lock<std::mutex> lock(queueMutex);
-        stopThreads = true;
-    }
-    condition.notify_all();
-
-    for (auto& thread : threadPool) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-
-    // Stop the leader thread
-    if (leaderThread.joinable()) {
-        leaderThread.join();
-    }
-
-    readAO->stop();
-    processAO->stop();
-    sendAO->stop();
-}
 
 // Leader thread that accepts connections (Leader-Follower Pattern)
 void Server::leaderWorker() {
@@ -377,52 +354,79 @@ void Server::leaderWorker() {
             readGraphFromClient(clientSocket);
         });
 
-        // Hand over leadership to another thread
-        {
-            std::unique_lock<std::mutex> lock(leaderMutex);
-            leaderAvailable = false;
-        }
+        // Demote current leader to follower and promote a new leader
+        demoteToFollower();
+        promoteToLeader((currentLeaderSocket + 1) % threadPool.size());
 
-        leaderCondition.notify_one();
-
-        // Return to waiting for another client connection
+        // Join the follower pool
+        threadWorker();
     }
 }
 // Worker threads process tasks
 void Server::threadWorker() {
     while (!stopThreads) {
-        std::function<void()> task;
+        if (isLeader.load()) {
+            leaderWorker();
+        } else {
+            std::function<void()> task;
 
-        {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            condition.wait(lock, [this]() { return !taskQueue.empty() || stopThreads; });
+            {
+                std::unique_lock<std::mutex> lock(queueMutex);
+                condition.wait(lock, [this]() { return !taskQueue.empty() || stopThreads || isLeader.load(); });
 
-            if (stopThreads && taskQueue.empty()) {
-                return;
+                if (stopThreads && taskQueue.empty()) {
+                    return;
+                }
+
+                if (isLeader.load()) {
+                    continue;  // Skip to next iteration to enter leaderWorker()
+                }
+
+                if (!taskQueue.empty()) {
+                    task = std::move(taskQueue.front());
+                    taskQueue.pop();
+                }
             }
 
-            if (!taskQueue.empty()) {
-                task = std::move(taskQueue.front());
-                taskQueue.pop();
-            }
-        }
-
-        if (task) {
-            std::cout << "[Worker Thread " << std::this_thread::get_id() << "] Executing task" << std::endl;
-            task();
-        }
-
-        // Hand over leadership to the next thread if available
-        {
-            std::unique_lock<std::mutex> lock(leaderMutex);
-            if (!leaderAvailable) {
-                leaderAvailable = true;
-                leaderCondition.notify_one();
+            if (task) {
+                std::cout << "[Worker Thread " << std::this_thread::get_id() << "] Executing task" << std::endl;
+                task();
             }
         }
     }
 }
 
+void Server::promoteToLeader(int threadId) {
+    std::unique_lock<std::mutex> lock(leaderMutex);
+    currentLeaderSocket = threadId;
+    isLeader.store(true);
+    std::cout << "[Thread " << std::this_thread::get_id() << "] Promoted to leader" << std::endl;
+    leaderPromotionCV.notify_all();
+}
+
+void Server::demoteToFollower() {
+    std::unique_lock<std::mutex> lock(leaderMutex);
+    isLeader.store(false);
+    std::cout << "[Thread " << std::this_thread::get_id() << "] Demoted to follower" << std::endl;
+}
+
+void Server::stop() {
+    running = false;
+    stopThreads = true;
+    
+    condition.notify_all();
+    leaderPromotionCV.notify_all();
+
+    for (auto& thread : threadPool) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    readAO->stop();
+    processAO->stop();
+    sendAO->stop();
+}
 int main() {
     try {
         Server server(8082, MSTType::PRIM);
