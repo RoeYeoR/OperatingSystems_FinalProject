@@ -1,12 +1,13 @@
 #ifndef ACTIVE_OBJECT_HPP
 #define ACTIVE_OBJECT_HPP
 
+#include <vector>
+#include <thread>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
-#include <functional>
-#include <thread>
 #include <atomic>
+#include <functional>
 
 class ActiveObject {
 public:
@@ -19,11 +20,11 @@ public:
 private:
     void workerThread();
 
+    std::vector<std::thread> workers;
     std::queue<std::function<void()>> taskQueue;
     std::mutex queueMutex;
     std::condition_variable condition;
     std::atomic<bool> running;
-    std::thread worker;
 };
 
 #endif // ACTIVE_OBJECT_HPP
