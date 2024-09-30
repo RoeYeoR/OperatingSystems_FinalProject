@@ -23,13 +23,15 @@ public:
 private:
     // Methods for pipeline stages
     void readGraphFromClient(int clientSocket); // Stage 1
-    void processGraph(const Graph& graph, int clientSocket); // Stage 2
+    void processGraph( const Graph& graph, MSTType initialMSTType, int clientSocket);//Stage 2
     //void sendResultToClient(int totalWeight, int clientSocket); // Stage 3
-    void sendResultToClient(const Graph& mst,int totalWeight, int longestDistance, double averageDistance, int clientSocket);
-
+    void sendResultToClient(const Graph& mst, int totalWeight, int longestDistance, double averageDistance, int clientSocket, MSTType chosenMSTType);
+    void sendMSTMetricsToClient(int totalWeight, int longestDistance, double averageDistance, int clientSocket, MSTType mstType);
     // Leader-Follower methods
     void leaderWorker();  // Leader thread to accept connections
     void threadWorker();  // Worker threads to process tasks
+    void handleChangeAlgorithm(const Graph& originalGraph, int clientSocket);
+    void handleShortestDistance(const Graph& mst, int clientSocket) ;
 
     // Server properties
     int serverSocket;

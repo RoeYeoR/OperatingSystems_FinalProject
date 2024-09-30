@@ -6,7 +6,7 @@
 #include "kruskal_mst.hpp"
 #include <memory>
 
-enum MSTType {
+enum class MSTType {
     PRIM,
     KRUSKAL
 };

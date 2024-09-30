@@ -10,6 +10,8 @@
 
 
 std::vector<Graph::Edge> KruskalMST::solve(const Graph& graph) {
+    std::cout << "Kruskal Solve Method" << std::endl;
+
     std::vector<Graph::Edge> result;
     std::vector<Graph::Edge> edges = graph.getEdges();  // Get all edges of the graph
     int V = graph.getVertices();  // Get the number of vertices

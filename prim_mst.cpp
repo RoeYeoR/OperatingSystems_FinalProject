@@ -6,6 +6,8 @@
 
 
 std::vector<Graph::Edge> PrimMST::solve(const Graph& graph) {
+    std::cout << "Prim Solve Method" << std::endl;
+
     int V = graph.getVertices();
     std::vector<bool> inMST(V, false);
     std::vector<Graph::Edge> result;
