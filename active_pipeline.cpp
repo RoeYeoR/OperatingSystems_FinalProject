@@ -47,8 +47,8 @@ void ActivePipelineStage::enqueue(Task task) {
 
     // Log task enqueuing in pipeline stage
     std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Enqueuing task in " 
-              << (stageType == StageType::SOURCE ? "SOURCE" : 
-                  stageType == StageType::SINK ? "SINK" : "INTERMEDIATE") 
+              << (stageType == StageType::READ ? "READ" : 
+                  stageType == StageType::SEND ? "SEND" : "PROCESS") 
               << " stage. Queue size before enqueue: " << taskQueue.size() 
               << " Thread ID: " << std::this_thread::get_id() << std::endl;
 
@@ -132,8 +132,8 @@ void ActivePipelineStage::workerThread() {
                 
                 // Log task processing
                 std::cout << "[ACTIVE-PIPELINE] Processing task in " 
-                          << (stageType == StageType::SOURCE ? "SOURCE" : 
-                              stageType == StageType::SINK ? "SINK" : "INTERMEDIATE") 
+                          << (stageType == StageType::READ ? "READ" : 
+                              stageType == StageType::SEND ? "SEND" : "PROCESS") 
                           << " stage. Remaining queue size: " << taskQueue.size() 
                           << " Thread ID: " << std::this_thread::get_id() << std::endl;
 
@@ -151,7 +151,7 @@ void ActivePipelineStage::processTask(Task& task) {
     task();
 
     // Pass to next stage if exists
-    if (nextStage && stageType != StageType::SINK) {
+    if (nextStage && stageType != StageType::SEND) {
         std::cout << "[ACTIVE-PIPELINE] Passing task to next stage" << std::endl;
         try {
             nextStage->enqueue(task);

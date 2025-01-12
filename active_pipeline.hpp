@@ -16,13 +16,13 @@ public:
     using Task = std::function<void()>;
     
     enum class StageType {
-        SOURCE,
-        PROCESSOR,
-        SINK
+        READ,
+        PROCESS,
+        SEND
     };
 
     ActivePipelineStage(
-        StageType type = StageType::PROCESSOR, 
+        StageType type = StageType::PROCESS, 
         size_t bufferSize = 10
     );
     ~ActivePipelineStage();
