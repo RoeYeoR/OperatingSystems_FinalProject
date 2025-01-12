@@ -27,9 +27,15 @@ public:
     
     // Configuration options for thread pool
     struct PoolConfig {
-        size_t threadCount{std::thread::hardware_concurrency()};
-        size_t maxQueueSize{100};
-        std::chrono::milliseconds leaderTimeout{std::chrono::milliseconds(500)};
+        size_t threadCount;
+        size_t maxQueueSize;
+        std::chrono::milliseconds leaderTimeout;
+
+        // Default constructor with default values
+        PoolConfig() 
+            : threadCount(std::thread::hardware_concurrency()),
+              maxQueueSize(100),
+              leaderTimeout(std::chrono::milliseconds(500)) {}
     };
 
     // Constructor with advanced configuration
