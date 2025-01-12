@@ -31,12 +31,9 @@ public:
     );
 
     // Additional constructors to support various use cases
-    explicit ActivePipelineStage(StageType type) : ActivePipelineStage(type, 10, 3) {}
-    explicit ActivePipelineStage(StageType type, unsigned long bufferSize) : ActivePipelineStage(type, bufferSize, 3) {}
-    ActivePipelineStage() : ActivePipelineStage(StageType::PROCESS, 10, 3) {}
-
-    // Simplified constructors to resolve overloading
-    explicit ActivePipelineStage(StageType type, size_t bufferSize, size_t maxRetries) : ActivePipelineStage(type, bufferSize, maxRetries) {}
+    explicit ActivePipelineStage(StageType type);
+    explicit ActivePipelineStage(StageType type, unsigned long bufferSize);
+    ActivePipelineStage();
 
     ~ActivePipelineStage();
 
@@ -85,10 +82,7 @@ public:
     // Primary constructor with default argument
     explicit ActivePipeline(size_t concurrencyLevel = 4);
 
-    // Additional constructors to support various use cases
-    explicit ActivePipeline(unsigned long concurrencyLevel) : ActivePipeline(static_cast<size_t>(concurrencyLevel)) {}
-    ActivePipeline() : ActivePipeline(4) {}
-
+    // Destructor
     ~ActivePipeline();
 
     // Enhanced pipeline construction
