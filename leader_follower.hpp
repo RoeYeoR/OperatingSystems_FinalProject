@@ -10,6 +10,7 @@
 #include <queue>
 #include <chrono>
 #include <memory>
+#include <iostream>
 
 class LeaderFollowerThreadPool {
 public:
@@ -26,13 +27,13 @@ public:
     
     // Configuration options for thread pool
     struct PoolConfig {
-        size_t threadCount = std::thread::hardware_concurrency();
-        size_t maxQueueSize = 100;
-        std::chrono::milliseconds leaderTimeout = std::chrono::milliseconds(500);
+        size_t threadCount{std::thread::hardware_concurrency()};
+        size_t maxQueueSize{100};
+        std::chrono::milliseconds leaderTimeout{std::chrono::milliseconds(500)};
     };
 
     // Constructor with advanced configuration
-    LeaderFollowerThreadPool(const PoolConfig& config = PoolConfig());
+    explicit LeaderFollowerThreadPool(const PoolConfig& config = PoolConfig());
     ~LeaderFollowerThreadPool();
 
     // Enhanced task submission
@@ -59,9 +60,9 @@ private:
     std::condition_variable condition;
     
     // Thread pool state
-    std::atomic<bool> isRunning;
-    std::atomic<bool> hasLeader;
-    std::atomic<size_t> activeThreads;
+    std::atomic<bool> isRunning{true};
+    std::atomic<bool> hasLeader{false};
+    std::atomic<size_t> activeThreads{0};
     
     // Configuration and state tracking
     PoolConfig config;

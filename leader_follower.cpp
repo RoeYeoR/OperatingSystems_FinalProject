@@ -56,9 +56,6 @@ private:
 
 LeaderFollowerThreadPool::LeaderFollowerThreadPool(const PoolConfig& config) 
     : config(config), 
-      isRunning(true), 
-      hasLeader(false), 
-      activeThreads(0),
       threadStates(config.threadCount, ThreadState::FOLLOWER),
       errorHandler([](const std::exception& e) { 
           std::cerr << "Unhandled thread pool error: " << e.what() << std::endl; 
@@ -156,7 +153,7 @@ void LeaderFollowerThreadPool::workerLoop(size_t workerId) {
         // Execute task
         try {
             threadStates[workerId] = ThreadState::PROCESSING;
-            task.task();
+            task();  // Directly invoke the task
             threadStates[workerId] = ThreadState::FOLLOWER;
         } catch (const std::exception& e) {
             threadStates[workerId] = ThreadState::FOLLOWER;
