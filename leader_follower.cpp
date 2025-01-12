@@ -18,10 +18,13 @@ LeaderFollowerThreadPool::~LeaderFollowerThreadPool() {
 }
 
 void LeaderFollowerThreadPool::enqueue(std::function<void()> task) {
-    {
-        std::unique_lock<std::mutex> lock(queueMutex);
-        taskQueue.push(std::move(task));
-    }
+    std::unique_lock<std::mutex> lock(queueMutex);
+    
+    // Log task enqueuing
+    std::cout << "[LEADER-FOLLOWER] Task enqueued. Current queue size: " << taskQueue.size() 
+              << " Thread ID: " << std::this_thread::get_id() << std::endl;
+    
+    taskQueue.push(std::move(task));
     condition.notify_one();
 }
 

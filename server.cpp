@@ -68,14 +68,22 @@ void Server::acceptConnections() {
         int clientSocket = accept(serverSocket, nullptr, nullptr);
         if (clientSocket == -1) {
             if (!running) break;
-            std::cerr << "Failed to accept client connection" << std::endl;
+            std::cerr << "[SERVER] Failed to accept client connection" << std::endl;
             continue;
         }
 
+        std::cout << "[SERVER] New client connected. Socket: " << clientSocket 
+                  << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
         // Enqueue connection handling task
         threadPool->enqueue([this, clientSocket]() {
+            std::cout << "[LEADER-FOLLOWER] Processing client connection. Socket: " << clientSocket 
+                      << " Thread ID: " << std::this_thread::get_id() << std::endl;
+            
             // Add task to read from client and pass the client socket to the readStage
             readStage->enqueue([this, clientSocket]() {
+                std::cout << "[ACTIVE-PIPELINE] Reading graph from client in SOURCE stage. Socket: " 
+                          << clientSocket << " Thread ID: " << std::this_thread::get_id() << std::endl;
                 readGraphFromClient(clientSocket);
             });
         });

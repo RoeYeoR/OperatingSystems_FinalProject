@@ -38,6 +38,13 @@ void ActivePipelineStage::enqueue(Task task) {
         throw std::runtime_error("Stage is not running");
     }
 
+    // Log task enqueuing in pipeline stage
+    std::cout << "[ACTIVE-PIPELINE] Task enqueued in " 
+              << (stageType == StageType::SOURCE ? "SOURCE" : 
+                  stageType == StageType::SINK ? "SINK" : "INTERMEDIATE") 
+              << " stage. Current queue size: " << taskQueue.size() 
+              << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
     taskQueue.push(std::move(task));
     condition.notify_one();
 }
@@ -90,6 +97,13 @@ void ActivePipelineStage::workerThread() {
                 // Apply stage-specific transformation
                 task = transformTask(task);
                 
+                // Log task processing
+                std::cout << "[ACTIVE-PIPELINE] Processing task in " 
+                          << (stageType == StageType::SOURCE ? "SOURCE" : 
+                              stageType == StageType::SINK ? "SINK" : "INTERMEDIATE") 
+                          << " stage. Remaining queue size: " << taskQueue.size() 
+                          << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
                 // Process the task
                 processTask(task);
             } catch (const std::exception& e) {
@@ -105,6 +119,7 @@ void ActivePipelineStage::processTask(Task& task) {
 
     // Pass to next stage if exists
     if (nextStage && stageType != StageType::SINK) {
+        std::cout << "[ACTIVE-PIPELINE] Passing task to next stage" << std::endl;
         try {
             nextStage->enqueue(task);
         } catch (const std::exception& e) {
