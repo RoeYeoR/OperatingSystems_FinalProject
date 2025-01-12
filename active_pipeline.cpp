@@ -31,10 +31,6 @@ ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize)
     : ActivePipelineStage(type, bufferSize, 3) 
 {}
 
-ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize, size_t maxRetries)
-    : ActivePipelineStage(type, bufferSize, maxRetries)
-{}
-
 ActivePipelineStage::ActivePipelineStage()
     : ActivePipelineStage(StageType::PROCESS, 10, 3) 
 {}
