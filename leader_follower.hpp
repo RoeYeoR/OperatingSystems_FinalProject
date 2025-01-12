@@ -13,10 +13,7 @@
 
 class LeaderFollowerThreadPool {
 public:
-    // Task type with optional return value and error handling
-    using Task = std::function<void()>;
-    
-    // Enhanced thread state tracking
+    // Enum for thread state
     enum class ThreadState {
         FOLLOWER,
         LEADER,
@@ -24,6 +21,9 @@ public:
         PROCESSING
     };
 
+    // Task type with function object
+    using Task = std::function<void()>;
+    
     // Configuration options for thread pool
     struct PoolConfig {
         size_t threadCount = std::thread::hardware_concurrency();
@@ -65,7 +65,9 @@ private:
     
     // Configuration and state tracking
     PoolConfig config;
-    std::vector<std::atomic<ThreadState>> threadStates;
+    
+    // Use non-atomic vector for thread states
+    std::vector<ThreadState> threadStates;
     
     // Error handling
     std::function<void(const std::exception&)> errorHandler;

@@ -8,6 +8,7 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#include <algorithm>
 
 enum class ThreadState {
     FOLLOWER,
@@ -53,38 +54,34 @@ private:
     std::function<void(const std::exception&)> errorHandler;
 };
 
-LeaderFollowerThreadPool::LeaderFollowerThreadPool(const PoolConfig& config)
+LeaderFollowerThreadPool::LeaderFollowerThreadPool(const PoolConfig& config) 
     : config(config), 
       isRunning(true), 
-      hasLeader(false),
+      hasLeader(false), 
       activeThreads(0),
-      errorHandler([](const std::exception& e) {
-          std::cerr << "Unhandled thread pool error: " << e.what() << std::endl;
-      })
+      threadStates(config.threadCount, ThreadState::FOLLOWER),
+      errorHandler([](const std::exception& e) { 
+          std::cerr << "Unhandled thread pool error: " << e.what() << std::endl; 
+      }) 
 {
-    // Initialize thread states
-    threadStates.resize(config.threadCount, ThreadState::FOLLOWER);
-    
-    // Create worker threads
+    // Initialize worker threads
     for (size_t i = 0; i < config.threadCount; ++i) {
         threads.emplace_back(&LeaderFollowerThreadPool::workerLoop, this, i);
     }
 }
 
 LeaderFollowerThreadPool::~LeaderFollowerThreadPool() {
-    shutdown(true);
+    shutdown(false);
 }
 
 void LeaderFollowerThreadPool::enqueue(Task task) {
     std::unique_lock<std::mutex> lock(queueMutex);
     
     // Wait if queue is full
-    if (!condition.wait_for(lock, std::chrono::seconds(1), [this]() { 
-        return taskQueue.size() < config.maxQueueSize; 
-    })) {
-        throw std::runtime_error("Task queue is full. Cannot enqueue.");
+    if (taskQueue.size() >= config.maxQueueSize) {
+        throw std::runtime_error("Task queue is full");
     }
-
+    
     taskQueue.push(std::move(task));
     condition.notify_one();
 }
@@ -93,25 +90,31 @@ void LeaderFollowerThreadPool::enqueuePriority(Task task) {
     std::unique_lock<std::mutex> lock(queueMutex);
     
     // Wait if queue is full
-    if (!condition.wait_for(lock, std::chrono::seconds(1), [this]() { 
-        return priorityTaskQueue.size() < config.maxQueueSize; 
-    })) {
-        throw std::runtime_error("Priority task queue is full. Cannot enqueue.");
+    if (priorityTaskQueue.size() >= config.maxQueueSize) {
+        throw std::runtime_error("Priority task queue is full");
     }
-
+    
     priorityTaskQueue.push(std::move(task));
     condition.notify_one();
 }
 
 void LeaderFollowerThreadPool::shutdown(bool waitForTasks) {
+    // Graceful shutdown
     isRunning = false;
     condition.notify_all();
-
+    
     // Wait for all threads to complete
     for (auto& thread : threads) {
         if (thread.joinable()) {
             thread.join();
         }
+    }
+    
+    // Clear remaining tasks if not waiting
+    if (!waitForTasks) {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        while (!taskQueue.empty()) taskQueue.pop();
+        while (!priorityTaskQueue.empty()) priorityTaskQueue.pop();
     }
 }
 
@@ -124,42 +127,23 @@ void LeaderFollowerThreadPool::setErrorHandler(std::function<void(const std::exc
     errorHandler = handler;
 }
 
-void LeaderFollowerThreadPool::promoteNewLeader() {
-    hasLeader = false;
-    condition.notify_one();
-}
-
 void LeaderFollowerThreadPool::workerLoop(size_t workerId) {
     while (isRunning) {
         Task task;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             
-            // Update thread state to waiting
-            threadStates[workerId] = ThreadState::WAITING;
-            
-            // Wait for a task or shutdown signal
+            // Wait for tasks or shutdown
             condition.wait(lock, [this]() { 
-                return !priorityTaskQueue.empty() || 
-                       !taskQueue.empty() || 
-                       !isRunning; 
+                return !isRunning || !taskQueue.empty() || !priorityTaskQueue.empty(); 
             });
-
-            // Check if we should exit
-            if (!isRunning && priorityTaskQueue.empty() && taskQueue.empty()) {
+            
+            // Exit if pool is stopped and no tasks
+            if (!isRunning && taskQueue.empty() && priorityTaskQueue.empty()) {
                 return;
             }
-
-            // Try to become the leader
-            bool expectedLeader = false;
-            if (!hasLeader.compare_exchange_strong(expectedLeader, true)) {
-                continue;
-            }
-
-            // Leader thread processing
-            threadStates[workerId] = ThreadState::LEADER;
             
-            // Prioritize priority tasks
+            // Prioritize high-priority tasks
             if (!priorityTaskQueue.empty()) {
                 task = std::move(priorityTaskQueue.front());
                 priorityTaskQueue.pop();
@@ -167,27 +151,22 @@ void LeaderFollowerThreadPool::workerLoop(size_t workerId) {
                 task = std::move(taskQueue.front());
                 taskQueue.pop();
             }
-
-            // Notify any waiting producers
-            condition.notify_one();
         }
-
-        // Execute the task if there is one
-        if (task) {
-            try {
-                threadStates[workerId] = ThreadState::PROCESSING;
-                
-                // Execute task
-                task.task();
-                
-                threadStates[workerId] = ThreadState::FOLLOWER;
-            } catch (const std::exception& e) {
-                // Handle task execution error
-                errorHandler(e);
-            }
+        
+        // Execute task
+        try {
+            threadStates[workerId] = ThreadState::PROCESSING;
+            task.task();
+            threadStates[workerId] = ThreadState::FOLLOWER;
+        } catch (const std::exception& e) {
+            threadStates[workerId] = ThreadState::FOLLOWER;
+            errorHandler(e);
         }
-
-        // Promote a new leader
-        promoteNewLeader();
     }
+}
+
+void LeaderFollowerThreadPool::promoteNewLeader() {
+    // Leader promotion logic can be implemented here
+    // This is a placeholder for more advanced leader selection
+    hasLeader = false;
 }
