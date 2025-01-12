@@ -24,11 +24,16 @@ public:
     };
 
     // Enhanced constructor with more configuration options
-    ActivePipelineStage(
+    explicit ActivePipelineStage(
         StageType type = StageType::PROCESS, 
         size_t bufferSize = 10,
         size_t maxRetries = 3
     );
+
+    // Explicit default constructor
+    ActivePipelineStage() : 
+        ActivePipelineStage(StageType::PROCESS) {}
+
     ~ActivePipelineStage();
 
     // Pipeline stage management
@@ -72,7 +77,12 @@ private:
 
 class ActivePipeline {
 public:
-    ActivePipeline(size_t concurrencyLevel = 4);
+    // Explicit constructor with optional concurrency level
+    explicit ActivePipeline(size_t concurrencyLevel = 4);
+
+    // Explicit default constructor
+    ActivePipeline() : ActivePipeline(4) {}
+
     ~ActivePipeline();
 
     // Enhanced pipeline construction
