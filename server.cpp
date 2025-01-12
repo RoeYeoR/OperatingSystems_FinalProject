@@ -169,7 +169,9 @@ void Server::processGraph(const Graph& graph, MSTType initialMSTType, int client
               << std::endl;
 
     std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(initialMSTType);
-    Graph mst = mstSolver->solve(graph);
+    std::vector<Graph::Edge> mstEdges = mstSolver->solve(graph);
+    Graph mst = graph.createMSTGraph(mstEdges);
+    
     int totalWeight = mstSolver->totalWeight(mst);
     int longestDistance = mstSolver->longestDistance(mst);
     double averageDistance = mstSolver->averageDistance(mst);
@@ -199,38 +201,47 @@ void Server::processGraph(const Graph& graph, MSTType initialMSTType, int client
             case 1: { // Change MST algorithm
                 int algoChoice;
                 if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
-                    std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read algorithm choice from client socket: " << clientSocket << std::endl;
-                    clientActive = false;
+                    std::cerr << "Failed to read algorithm choice" << std::endl;
                     break;
                 }
 
-                MSTType newMSTType = (algoChoice == 2) ? MSTType::KRUSKAL : MSTType::PRIM;
-                std::cout << "[Thread " << std::this_thread::get_id() << "] Changing MST algorithm to " 
-                          << (newMSTType == MSTType::PRIM ? "Prim" : "Kruskal") << " for client socket: " << clientSocket << std::endl;
+                // Convert client's numeric choice to MSTType
+                MSTType newMSTType;
+                switch(algoChoice) {
+                    case 1:
+                        newMSTType = MSTType::PRIM;
+                        break;
+                    case 2:
+                        newMSTType = MSTType::KRUSKAL;
+                        break;
+                    default:
+                        std::cerr << "Invalid algorithm choice: " << algoChoice << std::endl;
+                        continue;
+                }
 
                 // Recompute MST with the new algorithm
                 mstSolver = MSTFactory::createMST(newMSTType);
-                mst = mstSolver->solve(graph);
+                mstEdges = mstSolver->solve(graph);
+                mst = graph.createMSTGraph(mstEdges);
+                
                 totalWeight = mstSolver->totalWeight(mst);
                 longestDistance = mstSolver->longestDistance(mst);
                 averageDistance = mstSolver->averageDistance(mst);
 
-                // Send the updated MST metrics after changing algorithm
+                // Send updated metrics to the client
                 sendStage->enqueue([this, totalWeight, longestDistance, averageDistance, clientSocket, newMSTType]() {
                     std::cout << "[Thread " << std::this_thread::get_id() << "] Sending updated MST metrics to client socket: " << clientSocket << std::endl;
                     sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
                 });
                 break;
             }
-            case 2: { // Calculate and send the shortest distance between two vertices
+            case 2: { // Shortest distance
                 int u, v;
-                if (read(clientSocket, &u, sizeof(u)) <= 0 || read(clientSocket, &v, sizeof(v)) <= 0) {
-                    std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read vertices from client socket: " << clientSocket << std::endl;
-                    clientActive = false;
+                if (read(clientSocket, &u, sizeof(u)) <= 0 || 
+                    read(clientSocket, &v, sizeof(v)) <= 0) {
+                    std::cerr << "Failed to read vertices for shortest distance" << std::endl;
                     break;
                 }
-
-                std::cout << "[Thread " << std::this_thread::get_id() << "] Calculating shortest distance between " << u << " and " << v << " for client socket: " << clientSocket << std::endl;
 
                 int shortestDistance = mstSolver->shortestDistance(mst, u, v);
                 
@@ -240,19 +251,18 @@ void Server::processGraph(const Graph& graph, MSTType initialMSTType, int client
                 });
                 break;
             }
-            case 3: // Exit command
-                std::cout << "[Thread " << std::this_thread::get_id() << "] Client requested to close the connection (socket: " << clientSocket << ")" << std::endl;
+            case 3: // Exit
                 clientActive = false;
                 break;
             default:
-                std::cerr << "[Thread " << std::this_thread::get_id() << "] Invalid command received from client socket: " << clientSocket << std::endl;
+                std::cerr << "Unknown command: " << command << std::endl;
                 clientActive = false;
                 break;
         }
     }
 
-    std::cout << "[Thread " << std::this_thread::get_id() << "] Closing client socket: " << clientSocket << std::endl;
     // Close the socket after all commands are processed
+    std::cout << "Closing client socket" << std::endl;
     close(clientSocket);
 }
 
@@ -373,7 +383,8 @@ void Server::handleChangeAlgorithm(const Graph& originalGraph, int clientSocket)
 
     // Create MST solver with new algorithm
     std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(newMSTType);
-    Graph mst = mstSolver->solve(originalGraph);
+    std::vector<Graph::Edge> mstEdges = mstSolver->solve(originalGraph);
+    Graph mst = originalGraph.createMSTGraph(mstEdges);
     
     int totalWeight = mstSolver->totalWeight(mst);
     int longestDistance = mstSolver->longestDistance(mst);
