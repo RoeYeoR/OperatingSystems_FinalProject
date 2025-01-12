@@ -8,25 +8,67 @@
 #include <atomic>
 #include <functional>
 #include <queue>
+#include <chrono>
+#include <memory>
 
 class LeaderFollowerThreadPool {
 public:
-    LeaderFollowerThreadPool(size_t threadCount = 4);
+    // Task type with optional return value and error handling
+    using Task = std::function<void()>;
+    
+    // Enhanced thread state tracking
+    enum class ThreadState {
+        FOLLOWER,
+        LEADER,
+        WAITING,
+        PROCESSING
+    };
+
+    // Configuration options for thread pool
+    struct PoolConfig {
+        size_t threadCount = std::thread::hardware_concurrency();
+        size_t maxQueueSize = 100;
+        std::chrono::milliseconds leaderTimeout = std::chrono::milliseconds(500);
+    };
+
+    // Constructor with advanced configuration
+    LeaderFollowerThreadPool(const PoolConfig& config = PoolConfig());
     ~LeaderFollowerThreadPool();
 
-    void enqueue(std::function<void()> task);
-    void shutdown();
+    // Enhanced task submission
+    void enqueue(Task task);
+    void enqueuePriority(Task task);  // High-priority tasks
+    
+    // Thread pool management
+    void shutdown(bool waitForTasks = true);
+    size_t pendingTasks() const;
+    
+    // Advanced error handling
+    void setErrorHandler(std::function<void(const std::exception&)> handler);
 
 private:
-    void workerLoop();
+    // Worker thread management
+    void workerLoop(size_t workerId);
     void promoteNewLeader();
-
+    
+    // Thread synchronization primitives
     std::vector<std::thread> threads;
-    std::queue<std::function<void()>> taskQueue;
-    std::mutex queueMutex;
+    std::queue<Task> taskQueue;
+    std::queue<Task> priorityTaskQueue;
+    mutable std::mutex queueMutex;
     std::condition_variable condition;
+    
+    // Thread pool state
     std::atomic<bool> isRunning;
     std::atomic<bool> hasLeader;
+    std::atomic<size_t> activeThreads;
+    
+    // Configuration and state tracking
+    PoolConfig config;
+    std::vector<std::atomic<ThreadState>> threadStates;
+    
+    // Error handling
+    std::function<void(const std::exception&)> errorHandler;
 };
 
 #endif // LEADER_FOLLOWER_HPP

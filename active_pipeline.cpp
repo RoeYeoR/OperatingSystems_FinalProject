@@ -1,13 +1,24 @@
 #include "active_pipeline.hpp"
 #include <iostream>
+#include <stdexcept>
 
-ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize)
-    : stageType(type), 
-      maxBufferSize(bufferSize), 
-      running(true),
-      nextStage(nullptr),
-      previousStage(nullptr),
-      transformTask([](Task t) { return t; }) {
+// ActivePipelineStage Implementation
+ActivePipelineStage::ActivePipelineStage(
+    StageType type, 
+    size_t bufferSize, 
+    size_t maxRetries
+) : 
+    stageType(type), 
+    maxBufferSize(bufferSize),
+    maxRetries(maxRetries),
+    running(true),
+    nextStage(nullptr),
+    previousStage(nullptr),
+    transformTask([](Task t) { return t; }),
+    errorHandler([](const std::exception& e) {
+        std::cerr << "Unhandled pipeline stage error: " << e.what() << std::endl;
+    })
+{
     // Start worker thread for this stage
     worker = std::make_unique<std::thread>(&ActivePipelineStage::workerThread, this);
 }
@@ -29,35 +40,21 @@ void ActivePipelineStage::connectPreviousStage(std::shared_ptr<ActivePipelineSta
 void ActivePipelineStage::enqueue(Task task) {
     std::unique_lock<std::mutex> lock(queueMutex);
     
-    // Enhanced logging before waiting
-    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Attempting to enqueue task. "
-              << "Current queue size: " << taskQueue.size() 
-              << " Max buffer size: " << maxBufferSize
-              << " Thread ID: " << std::this_thread::get_id() << std::endl;
-
     // Wait if buffer is full
     condition.wait(lock, [this]() { 
         return taskQueue.size() < maxBufferSize || !running; 
     });
 
     if (!running) {
-        std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Stage not running. Cannot enqueue." << std::endl;
         throw std::runtime_error("Stage is not running");
     }
 
-    // Log task enqueuing in pipeline stage
-    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Enqueuing task in " 
+    std::cout << "[PIPELINE-DEBUG] Enqueuing task in " 
               << (stageType == StageType::READ ? "READ" : 
                   stageType == StageType::SEND ? "SEND" : "PROCESS") 
-              << " stage. Queue size before enqueue: " << taskQueue.size() 
-              << " Thread ID: " << std::this_thread::get_id() << std::endl;
+              << " stage. Queue size: " << taskQueue.size() << std::endl;
 
     taskQueue.push(std::move(task));
-    
-    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Task enqueued. New queue size: " 
-              << taskQueue.size() 
-              << " Thread ID: " << std::this_thread::get_id() << std::endl;
-
     condition.notify_one();
 }
 
@@ -79,18 +76,17 @@ void ActivePipelineStage::setTransformation(std::function<Task(Task)> transform)
     transformTask = transform;
 }
 
+void ActivePipelineStage::setErrorHandler(std::function<void(const std::exception&)> handler) {
+    std::unique_lock<std::mutex> lock(queueMutex);
+    errorHandler = handler;
+}
+
 void ActivePipelineStage::workerThread() {
     while (running) {
         Task task;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             
-            // Enhanced logging for wait condition
-            std::cout << "[ACTIVE-PIPELINE-DEBUG] Waiting for task. Current queue size: " 
-                      << taskQueue.size() 
-                      << " Running: " << running 
-                      << " Thread ID: " << std::this_thread::get_id() << std::endl;
-
             // Wait for a task or stop signal
             condition.wait(lock, [this]() { 
                 return !taskQueue.empty() || !running; 
@@ -98,21 +94,12 @@ void ActivePipelineStage::workerThread() {
 
             // Check if we should exit
             if (!running && taskQueue.empty()) {
-                std::cout << "[ACTIVE-PIPELINE-DEBUG] Exiting worker thread. No more tasks." << std::endl;
                 return;
             }
 
             // Get the task
-            if (!taskQueue.empty()) {
-                std::cout << "[ACTIVE-PIPELINE-DEBUG] Before pop - Queue size: " 
-                          << taskQueue.size() << std::endl;
-                
-                task = std::move(taskQueue.front());
-                taskQueue.pop();
-                
-                std::cout << "[ACTIVE-PIPELINE-DEBUG] After pop - Queue size: " 
-                          << taskQueue.size() << std::endl;
-            }
+            task = std::move(taskQueue.front());
+            taskQueue.pop();
             
             // Notify any waiting producers
             condition.notify_one();
@@ -120,60 +107,48 @@ void ActivePipelineStage::workerThread() {
 
         // Process the task
         if (task) {
-            std::cout << "[ACTIVE-PIPELINE-DEBUG] Processing task. Thread ID: " 
-                      << std::this_thread::get_id() << std::endl;
-            
-            // Simulate some processing time to help visualize queue
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            
             try {
                 // Apply stage-specific transformation
                 task = transformTask(task);
                 
-                // Log task processing
-                std::cout << "[ACTIVE-PIPELINE] Processing task in " 
-                          << (stageType == StageType::READ ? "READ" : 
-                              stageType == StageType::SEND ? "SEND" : "PROCESS") 
-                          << " stage. Remaining queue size: " << taskQueue.size() 
-                          << " Thread ID: " << std::this_thread::get_id() << std::endl;
-
-                // Process the task
-                processTask(task);
+                // Pass to next stage if exists and not a send stage
+                if (nextStage && stageType != StageType::SEND) {
+                    std::cout << "[PIPELINE-DEBUG] Passing task to next stage" << std::endl;
+                    nextStage->enqueue(task);
+                }
             } catch (const std::exception& e) {
-                std::cerr << "Pipeline stage task error: " << e.what() << std::endl;
+                // Handle or propagate error
+                errorHandler(e);
+                
+                // Optional: retry mechanism
+                if (maxRetries > 0) {
+                    // Implement retry logic here
+                }
             }
         }
     }
 }
 
-void ActivePipelineStage::processTask(Task& task) {
-    // Execute the task
-    task();
-
-    // Pass to next stage if exists
-    if (nextStage && stageType != StageType::SEND) {
-        std::cout << "[ACTIVE-PIPELINE] Passing task to next stage" << std::endl;
-        try {
-            nextStage->enqueue(task);
-        } catch (const std::exception& e) {
-            std::cerr << "Error passing task to next stage: " << e.what() << std::endl;
-        }
-    }
-}
-
-ActivePipeline::ActivePipeline() {}
+// ActivePipeline Implementation
+ActivePipeline::ActivePipeline(size_t concurrencyLevel) 
+    : concurrencyLevel(concurrencyLevel),
+      globalErrorHandler([](const std::exception& e) {
+          std::cerr << "Unhandled pipeline error: " << e.what() << std::endl;
+      }) 
+{}
 
 ActivePipeline::~ActivePipeline() {
     stop();
 }
 
 void ActivePipeline::addStage(std::shared_ptr<ActivePipelineStage> stage) {
-    if (!stages.empty()) {
-        // Link previous stage to the new stage
-        stages.back()->setNextStage(stage);
-        stage->connectPreviousStage(stages.back());
-    }
     stages.push_back(stage);
+    
+    // Connect stages sequentially
+    if (stages.size() > 1) {
+        stages[stages.size() - 2]->setNextStage(stage);
+        stage->connectPreviousStage(stages[stages.size() - 2]);
+    }
 }
 
 void ActivePipeline::start(ActivePipelineStage::Task initialTask) {
@@ -181,13 +156,16 @@ void ActivePipeline::start(ActivePipelineStage::Task initialTask) {
         throw std::runtime_error("No stages in pipeline");
     }
 
-    // Start with the first stage (source stage)
+    // Start with the initial task in the first stage
     stages.front()->enqueue(initialTask);
 }
 
 void ActivePipeline::stop() {
-    // Stop stages in reverse order
-    for (auto it = stages.rbegin(); it != stages.rend(); ++it) {
-        (*it)->stop();
+    for (auto& stage : stages) {
+        stage->stop();
     }
+}
+
+void ActivePipeline::setGlobalErrorHandler(std::function<void(const std::exception&)> handler) {
+    globalErrorHandler = handler;
 }
