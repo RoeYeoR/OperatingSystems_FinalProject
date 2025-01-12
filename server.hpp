@@ -22,16 +22,16 @@ private:
     // Socket and connection management
     int serverSocket;
     int port;
-    int currentLeaderSocket;
+    
+    // MST algorithm configuration
+    MSTType mstType;
 
     // Concurrency control
     std::unique_ptr<LeaderFollowerThreadPool> threadPool;
     std::atomic<bool> running;
     std::atomic<bool> stopThreads;
     std::atomic<bool> isLeader;
-
-    // MST algorithm configuration
-    MSTType mstType;
+    int currentLeaderSocket;
 
     // Active Pipeline Stages
     std::shared_ptr<ActivePipelineStage> readStage;

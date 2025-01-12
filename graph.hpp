@@ -19,6 +19,9 @@ public:
     std::vector<Edge> getEdgesFromNode(int node) const; 
     int getVertices() const;
 
+    // New method to create MST graph from a set of edges
+    Graph createMSTGraph(const std::vector<Edge>& mstEdges) const;
+
 private:
     int V;  // Number of vertices
     std::vector<Edge> edges;  // List of edges

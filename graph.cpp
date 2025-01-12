@@ -20,7 +20,17 @@ std::vector<Graph::Edge> Graph::getEdgesFromNode(int node) const {
     return nodeEdges;
 }
 
-
+Graph Graph::createMSTGraph(const std::vector<Edge>& mstEdges) const {
+    // Create a new graph with the same number of vertices
+    Graph mstGraph(V);
+    
+    // Add each MST edge to the new graph
+    for (const auto& edge : mstEdges) {
+        mstGraph.addEdge(edge.src, edge.dest, edge.weight);
+    }
+    
+    return mstGraph;
+}
 
 int Graph::getVertices() const {
     return V;
