@@ -23,16 +23,18 @@ public:
         SEND        // Output/Sink stage
     };
 
-    // Enhanced constructor with more configuration options
+    // Multiple constructors to support different use cases
     explicit ActivePipelineStage(
         StageType type = StageType::PROCESS, 
         size_t bufferSize = 10,
         size_t maxRetries = 3
     );
 
-    // Explicit default constructor
-    ActivePipelineStage() : 
-        ActivePipelineStage(StageType::PROCESS) {}
+    // Additional constructors
+    explicit ActivePipelineStage(StageType type);
+    explicit ActivePipelineStage(StageType type, size_t bufferSize);
+    explicit ActivePipelineStage(StageType type, unsigned long);
+    ActivePipelineStage();
 
     ~ActivePipelineStage();
 
@@ -42,6 +44,7 @@ public:
     
     // Enhanced task submission with error handling
     void enqueue(Task task);
+    void enqueue(std::function<void()> task);  // Additional overload
     void stop();
     bool isRunning() const;
 
@@ -77,11 +80,10 @@ private:
 
 class ActivePipeline {
 public:
-    // Explicit constructor with optional concurrency level
+    // Multiple constructors to support different use cases
     explicit ActivePipeline(size_t concurrencyLevel = 4);
-
-    // Explicit default constructor
-    ActivePipeline() : ActivePipeline(4) {}
+    explicit ActivePipeline(unsigned long concurrencyLevel);
+    ActivePipeline();
 
     ~ActivePipeline();
 
