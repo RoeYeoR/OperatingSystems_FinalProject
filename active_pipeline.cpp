@@ -24,10 +24,20 @@ ActivePipelineStage::ActivePipelineStage(
 }
 
 ActivePipelineStage::ActivePipelineStage(StageType type)
-    : ActivePipelineStage(type, 10, 3) {}
+    : ActivePipelineStage(type, 10, 3) 
+{}
+
+ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize)
+    : ActivePipelineStage(type, bufferSize, 3) 
+{}
+
+ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize, size_t maxRetries)
+    : ActivePipelineStage(type, bufferSize, maxRetries)
+{}
 
 ActivePipelineStage::ActivePipelineStage()
-    : ActivePipelineStage(StageType::PROCESS, 10, 3) {}
+    : ActivePipelineStage(StageType::PROCESS, 10, 3) 
+{}
 
 ActivePipelineStage::~ActivePipelineStage() {
     stop();
@@ -149,6 +159,14 @@ ActivePipeline::ActivePipeline(size_t concurrencyLevel)
       globalErrorHandler([](const std::exception& e) {
           std::cerr << "Unhandled pipeline error: " << e.what() << std::endl;
       }) 
+{}
+
+ActivePipeline::ActivePipeline(unsigned long concurrencyLevel)
+    : ActivePipeline(static_cast<size_t>(concurrencyLevel))
+{}
+
+ActivePipeline::ActivePipeline()
+    : ActivePipeline(4)
 {}
 
 ActivePipeline::~ActivePipeline() {

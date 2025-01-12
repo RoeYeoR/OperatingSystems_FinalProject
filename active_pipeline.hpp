@@ -30,6 +30,12 @@ public:
         size_t maxRetries = 3
     );
 
+    // Additional constructors to support various use cases
+    explicit ActivePipelineStage(StageType type);
+    explicit ActivePipelineStage(StageType type, size_t bufferSize);
+    explicit ActivePipelineStage(StageType type, size_t bufferSize, size_t maxRetries);
+    ActivePipelineStage();
+
     ~ActivePipelineStage();
 
     // Pipeline stage management
@@ -76,6 +82,10 @@ class ActivePipeline {
 public:
     // Primary constructor with default argument
     explicit ActivePipeline(size_t concurrencyLevel = 4);
+
+    // Additional constructors to support various use cases
+    explicit ActivePipeline(unsigned long concurrencyLevel);
+    ActivePipeline();
 
     // Destructor
     ~ActivePipeline();
