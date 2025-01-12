@@ -164,10 +164,12 @@ void Server::readGraphFromClient(int clientSocket) {
 
 // Process the graph and calculate the MST and additional metrics (Stage 2)
 void Server::processGraph(const Graph& graph, MSTType initialMSTType, int clientSocket) {
-    std::cout << "process graph "  << std::endl;
+    std::cout << "Processing graph with initial MST type: " 
+              << (initialMSTType == MSTType::PRIM ? "Prim" : "Kruskal") 
+              << std::endl;
 
     std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(initialMSTType);
-    Graph mst = mstSolver->getGraph(mstSolver->solve(graph));
+    Graph mst = mstSolver->solve(graph);
     int totalWeight = mstSolver->totalWeight(mst);
     int longestDistance = mstSolver->longestDistance(mst);
     double averageDistance = mstSolver->averageDistance(mst);
@@ -179,18 +181,21 @@ void Server::processGraph(const Graph& graph, MSTType initialMSTType, int client
     });
 
     bool clientActive = true;
-    while (clientActive && running) {
-        int command;
-        ssize_t commandRead = read(clientSocket, &command, sizeof(command));
+    int command;
+    std::cout << "Waiting for client commands..." << std::endl;
 
-        if (commandRead <= 0) {
-            std::cerr << "[Thread " << std::this_thread::get_id() << "] Failed to read command from client socket: " << clientSocket << std::endl;
+    while (clientActive && running) {
+        std::cout << "Attempting to read command from client socket..." << std::endl;
+        ssize_t bytesRead = read(clientSocket, &command, sizeof(command));
+        
+        if (bytesRead <= 0) {
+            std::cerr << "Error reading command or client disconnected. Bytes read: " << bytesRead << std::endl;
             break;
         }
 
-        std::cout << "[Thread " << std::this_thread::get_id() << "] Command received: " << command << " from client socket: " << clientSocket << std::endl;
+        std::cout << "Received command: " << command << std::endl;
 
-        switch (command) {
+        switch(command) {
             case 1: { // Change MST algorithm
                 int algoChoice;
                 if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
@@ -205,7 +210,7 @@ void Server::processGraph(const Graph& graph, MSTType initialMSTType, int client
 
                 // Recompute MST with the new algorithm
                 mstSolver = MSTFactory::createMST(newMSTType);
-                mst = mstSolver->getGraph(mstSolver->solve(graph));
+                mst = mstSolver->solve(graph);
                 totalWeight = mstSolver->totalWeight(mst);
                 longestDistance = mstSolver->longestDistance(mst);
                 averageDistance = mstSolver->averageDistance(mst);
@@ -337,21 +342,53 @@ void Server::sendResultToClient(const Graph& mst, int totalWeight, int longestDi
 
 void Server::handleChangeAlgorithm(const Graph& originalGraph, int clientSocket) {
     int algoChoice;
-    if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
-        std::cerr << "Error reading new algorithm choice from client" << std::endl;
+    std::cout << "Handling algorithm change request..." << std::endl;
+    
+    // Read algorithm choice from client
+    ssize_t bytesRead = read(clientSocket, &algoChoice, sizeof(algoChoice));
+    if (bytesRead <= 0) {
+        std::cerr << "Failed to read algorithm choice. Bytes read: " << bytesRead << std::endl;
         return;
     }
 
-    MSTType newMSTType = (algoChoice == 2) ? MSTType::KRUSKAL : MSTType::PRIM;
-    
-    // Recompute MST with the new algorithm
-    auto mstSolver = MSTFactory::createMST(newMSTType);
-    Graph newMST = mstSolver->getGraph(mstSolver->solve(originalGraph));
-    int totalWeight = mstSolver->totalWeight(newMST);
-    int longestDistance = mstSolver->longestDistance(newMST);
-    double averageDistance = mstSolver->averageDistance(newMST);
+    std::cout << "Received algorithm choice: " << algoChoice << std::endl;
 
-    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
+    // Convert client's numeric choice to MSTType
+    MSTType newMSTType;
+    switch(algoChoice) {
+        case 1:  // Prim
+            newMSTType = MSTType::PRIM;
+            break;
+        case 2:  // Kruskal
+            newMSTType = MSTType::KRUSKAL;
+            break;
+        default:
+            std::cerr << "Invalid algorithm choice: " << algoChoice << std::endl;
+            return;
+    }
+
+    std::cout << "Selected MST algorithm: " 
+              << (newMSTType == MSTType::PRIM ? "Prim" : "Kruskal") 
+              << std::endl;
+
+    // Create MST solver with new algorithm
+    std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(newMSTType);
+    Graph mst = mstSolver->solve(originalGraph);
+    
+    int totalWeight = mstSolver->totalWeight(mst);
+    int longestDistance = mstSolver->longestDistance(mst);
+    double averageDistance = mstSolver->averageDistance(mst);
+
+    std::cout << "MST Metrics - Total Weight: " << totalWeight 
+              << ", Longest Distance: " << longestDistance 
+              << ", Average Distance: " << averageDistance 
+              << std::endl;
+
+    // Send updated metrics to client
+    sendStage->enqueue([this, totalWeight, longestDistance, averageDistance, clientSocket, newMSTType]() {
+        std::cout << "Sending updated MST metrics to client" << std::endl;
+        sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
+    });
 }
 
 void Server::handleShortestDistance(const Graph& mst, int clientSocket) {
