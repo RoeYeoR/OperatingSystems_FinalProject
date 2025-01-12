@@ -30,9 +30,11 @@ public:
         size_t maxRetries = 3
     );
 
-    // Prevent duplicate constructor declarations
-    explicit ActivePipelineStage(StageType type) : ActivePipelineStage(type, 10, 3) {}
-    ActivePipelineStage() : ActivePipelineStage(StageType::PROCESS, 10, 3) {}
+    // Additional constructors
+    explicit ActivePipelineStage(StageType type);
+    explicit ActivePipelineStage(StageType type, unsigned long bufferSize);
+    explicit ActivePipelineStage(StageType type, size_t bufferSize);
+    ActivePipelineStage();
 
     // Copy and move constructors
     ActivePipelineStage(const ActivePipelineStage& other) = delete;
@@ -87,8 +89,9 @@ public:
     // Primary constructor with default argument
     explicit ActivePipeline(size_t concurrencyLevel = 4);
 
-    // Prevent duplicate constructor declarations
-    ActivePipeline() : ActivePipeline(4) {}
+    // Additional constructors
+    explicit ActivePipeline(unsigned long concurrencyLevel);
+    ActivePipeline();
 
     // Copy and move constructors
     ActivePipeline(const ActivePipeline& other) = delete;
