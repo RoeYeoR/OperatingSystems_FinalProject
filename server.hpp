@@ -36,7 +36,6 @@ private:
     // Active Pipeline Stages
     std::shared_ptr<ActivePipelineStage> readStage;
     std::shared_ptr<ActivePipelineStage> processStage;
-    b. Prim
     std::shared_ptr<ActivePipelineStage> sendStage;
     std::unique_ptr<ActivePipeline> pipeline;
 

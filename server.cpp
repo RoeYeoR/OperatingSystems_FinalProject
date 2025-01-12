@@ -9,8 +9,8 @@
 
 // Constructor
 Server::Server(int port, MSTType mstType)
-    : port(port), mstType(mstType), running(false), 
-      stopThreads(false), isLeader(false), currentLeaderSocket(-1) {
+    : port(port), currentLeaderSocket(-1), mstType(mstType), 
+      running(false), stopThreads(false), isLeader(false) {
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (serverSocket == -1) {
         throw std::runtime_error("Failed to create socket");
@@ -121,59 +121,49 @@ void Server::readGraphFromClient(int clientSocket) {
         }
         graph.addEdge(u, v, w);
         std::cout << "[Thread " << std::this_thread::get_id() << "] Added Edge: u=" << u<<" v="<<v<<" w="<<w << std::endl;
-
-        // graph.addEdge(0, 1, 11);
-        // graph.addEdge(2, 0, 1);
-        // graph.addEdge(0, 3, 2);
-        // graph.addEdge(2, 3, 9);
-
-        //graph.addEdge(1, 3, 20);
-        //graph.addEdge(3, 2, 1);
-        //graph.addEdge(2, 4, 3);
-        //graph.addEdge(4, 5, 10);
-        //graph.addEdge(2, 5, 9);
-        
     }
-char algoChoiceBuffer[10];  // Small buffer since we expect only "Prim" or "Kruskal"
 
-// Receive the algorithm choice from the client
-std::cout << "Receiving MST algorithm choice from client socket: " << clientSocket << std::endl;
-ssize_t result = recv(clientSocket, algoChoiceBuffer, sizeof(algoChoiceBuffer), 0);
-if (result <= 0) {
-    std::cerr << "Failed to receive MST algorithm choice." << std::endl;
-    close(clientSocket);
-    return;
-}
+    char algoChoiceBuffer[10];  // Small buffer since we expect only "Prim" or "Kruskal"
 
-// Null-terminate the received string
-algoChoiceBuffer[result] = '\0';  // Ensure the string is null-terminated
+    // Receive the algorithm choice from the client
+    std::cout << "Receiving MST algorithm choice from client socket: " << clientSocket << std::endl;
+    ssize_t result = recv(clientSocket, algoChoiceBuffer, sizeof(algoChoiceBuffer), 0);
+    if (result <= 0) {
+        std::cerr << "Failed to receive MST algorithm choice." << std::endl;
+        close(clientSocket);
+        return;
+    }
 
-// Now compare the received string to select the algorithm
-std::string algoChoice(algoChoiceBuffer);
-MSTType clientMSTType;
+    // Null-terminate the received string
+    algoChoiceBuffer[result] = '\0';  // Ensure the string is null-terminated
 
-if (algoChoice == "Prim") {
-    clientMSTType = MSTType::PRIM;
-    std::cout << "Client chose Prim's algorithm." << std::endl;
-} else if (algoChoice == "Kruskal") {
-    clientMSTType = MSTType::KRUSKAL;
-    std::cout << "Client chose Kruskal's algorithm." << std::endl;
-} else {
-    std::cerr << "Invalid MST algorithm choice received from client." << std::endl;
-    close(clientSocket);  // Close the connection on error
-    return;
-}
-  std::cout << "[Thread " << std::this_thread::get_id() << "] Preparing to add task to processStage queue for client socket: " << clientSocket << std::endl;
+    // Now compare the received string to select the algorithm
+    std::string algoChoice(algoChoiceBuffer);
+    MSTType clientMSTType;
 
-processStage->addTask([this, graph = graph, clientMSTType, clientSocket]() {
-    std::cout << "[Thread " << std::this_thread::get_id() << "] Task for processGraph added to processStage queue for client socket: " << clientSocket << std::endl;
-    processGraph(graph, clientMSTType, clientSocket);
-});
-std::cout << "[Thread " << std::this_thread::get_id() << "] Task successfully added to processStage queue for client socket: " << clientSocket << std::endl;
+    if (algoChoice == "Prim") {
+        clientMSTType = MSTType::PRIM;
+        std::cout << "Client chose Prim's algorithm." << std::endl;
+    } else if (algoChoice == "Kruskal") {
+        clientMSTType = MSTType::KRUSKAL;
+        std::cout << "Client chose Kruskal's algorithm." << std::endl;
+    } else {
+        std::cerr << "Invalid MST algorithm choice received from client." << std::endl;
+        close(clientSocket);  // Close the connection on error
+        return;
+    }
+
+    std::cout << "[Thread " << std::this_thread::get_id() << "] Preparing to add task to processStage queue for client socket: " << clientSocket << std::endl;
+
+    processStage->enqueue([this, graph = graph, clientMSTType, clientSocket]() {
+        std::cout << "[Thread " << std::this_thread::get_id() << "] Task for processGraph added to processStage queue for client socket: " << clientSocket << std::endl;
+        processGraph(graph, clientMSTType, clientSocket);
+    });
+    std::cout << "[Thread " << std::this_thread::get_id() << "] Task successfully added to processStage queue for client socket: " << clientSocket << std::endl;
 }
 
 // Process the graph and calculate the MST and additional metrics (Stage 2)
-void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clientSocket) {
+void Server::processGraph(const Graph& graph, MSTType initialMSTType, int clientSocket) {
     std::cout << "process graph "  << std::endl;
 
     std::unique_ptr<MSTStrategy> mstSolver = MSTFactory::createMST(initialMSTType);
@@ -183,10 +173,10 @@ void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clie
     double averageDistance = mstSolver->averageDistance(mst);
 
     // Send initial MST metrics to the client
-    sendStage->addTask([this, totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType]() {
-    std::cout << "[Thread " << std::this_thread::get_id() << "] Sending MST metrics to client socket: " << clientSocket << std::endl;
-    sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType);
-});
+    sendStage->enqueue([this, totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType]() {
+        std::cout << "[Thread " << std::this_thread::get_id() << "] Sending MST metrics to client socket: " << clientSocket << std::endl;
+        sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, initialMSTType);
+    });
 
     bool clientActive = true;
     while (clientActive && running) {
@@ -221,7 +211,7 @@ void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clie
                 averageDistance = mstSolver->averageDistance(mst);
 
                 // Send the updated MST metrics after changing algorithm
-                sendStage->addTask([this, totalWeight, longestDistance, averageDistance, clientSocket, newMSTType]() {
+                sendStage->enqueue([this, totalWeight, longestDistance, averageDistance, clientSocket, newMSTType]() {
                     std::cout << "[Thread " << std::this_thread::get_id() << "] Sending updated MST metrics to client socket: " << clientSocket << std::endl;
                     sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
                 });
@@ -239,7 +229,7 @@ void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clie
 
                 int shortestDistance = mstSolver->shortestDistance(mst, u, v);
                 
-                sendStage->addTask([this, shortestDistance, clientSocket]() {
+                sendStage->enqueue([this, shortestDistance, clientSocket]() {
                     std::cout << "[Thread " << std::this_thread::get_id() << "] Sending shortest distance to client socket: " << clientSocket << std::endl;
                     write(clientSocket, &shortestDistance, sizeof(shortestDistance));
                 });
@@ -260,6 +250,7 @@ void Server::processGraph(  const Graph& graph, MSTType initialMSTType, int clie
     // Close the socket after all commands are processed
     close(clientSocket);
 }
+
 // Send MST metrics to the client
 void Server::sendMSTMetricsToClient(int totalWeight, int longestDistance, double averageDistance, int clientSocket, MSTType mstType) {
     std::string algoName = (mstType == MSTType::PRIM) ? "Prim" : "Kruskal";
@@ -343,6 +334,7 @@ void Server::sendResultToClient(const Graph& mst, int totalWeight, int longestDi
 
     close(clientSocket);
 }
+
 void Server::handleChangeAlgorithm(const Graph& originalGraph, int clientSocket) {
     int algoChoice;
     if (read(clientSocket, &algoChoice, sizeof(algoChoice)) <= 0) {
@@ -361,6 +353,7 @@ void Server::handleChangeAlgorithm(const Graph& originalGraph, int clientSocket)
 
     sendMSTMetricsToClient(totalWeight, longestDistance, averageDistance, clientSocket, newMSTType);
 }
+
 void Server::handleShortestDistance(const Graph& mst, int clientSocket) {
     int u, v;
     if (read(clientSocket, &u, sizeof(u)) <= 0 || read(clientSocket, &v, sizeof(v)) <= 0) {
