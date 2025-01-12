@@ -1,58 +1,6 @@
 #include "leader_follower.hpp"
-#include <iostream>
 #include <stdexcept>
-#include <vector>
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <thread>
-#include <chrono>
-#include <functional>
 #include <algorithm>
-
-enum class ThreadState {
-    FOLLOWER,
-    WAITING,
-    LEADER,
-    PROCESSING
-};
-
-struct PoolConfig {
-    size_t threadCount;
-    size_t maxQueueSize;
-};
-
-struct Task {
-    std::function<void()> task;
-};
-
-class LeaderFollowerThreadPool {
-public:
-    LeaderFollowerThreadPool(const PoolConfig& config);
-    ~LeaderFollowerThreadPool();
-
-    void enqueue(Task task);
-    void enqueuePriority(Task task);
-    void shutdown(bool waitForTasks);
-    size_t pendingTasks() const;
-    void setErrorHandler(std::function<void(const std::exception&)> handler);
-
-private:
-    void promoteNewLeader();
-    void workerLoop(size_t workerId);
-
-    const PoolConfig config;
-    std::vector<std::thread> threads;
-    std::queue<Task> taskQueue;
-    std::queue<Task> priorityTaskQueue;
-    std::mutex queueMutex;
-    std::condition_variable condition;
-    bool isRunning;
-    bool hasLeader;
-    size_t activeThreads;
-    std::vector<ThreadState> threadStates;
-    std::function<void(const std::exception&)> errorHandler;
-};
 
 LeaderFollowerThreadPool::LeaderFollowerThreadPool(const PoolConfig& config) 
     : config(config), 
