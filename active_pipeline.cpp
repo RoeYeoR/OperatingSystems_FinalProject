@@ -29,23 +29,35 @@ void ActivePipelineStage::connectPreviousStage(std::shared_ptr<ActivePipelineSta
 void ActivePipelineStage::enqueue(Task task) {
     std::unique_lock<std::mutex> lock(queueMutex);
     
+    // Enhanced logging before waiting
+    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Attempting to enqueue task. "
+              << "Current queue size: " << taskQueue.size() 
+              << " Max buffer size: " << maxBufferSize
+              << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
     // Wait if buffer is full
     condition.wait(lock, [this]() { 
         return taskQueue.size() < maxBufferSize || !running; 
     });
 
     if (!running) {
+        std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Stage not running. Cannot enqueue." << std::endl;
         throw std::runtime_error("Stage is not running");
     }
 
     // Log task enqueuing in pipeline stage
-    std::cout << "[ACTIVE-PIPELINE] Task enqueued in " 
+    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Enqueuing task in " 
               << (stageType == StageType::SOURCE ? "SOURCE" : 
                   stageType == StageType::SINK ? "SINK" : "INTERMEDIATE") 
-              << " stage. Current queue size: " << taskQueue.size() 
+              << " stage. Queue size before enqueue: " << taskQueue.size() 
               << " Thread ID: " << std::this_thread::get_id() << std::endl;
 
     taskQueue.push(std::move(task));
+    
+    std::cout << "[ACTIVE-PIPELINE-ENQUEUE-DEBUG] Task enqueued. New queue size: " 
+              << taskQueue.size() 
+              << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
     condition.notify_one();
 }
 
@@ -73,6 +85,12 @@ void ActivePipelineStage::workerThread() {
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             
+            // Enhanced logging for wait condition
+            std::cout << "[ACTIVE-PIPELINE-DEBUG] Waiting for task. Current queue size: " 
+                      << taskQueue.size() 
+                      << " Running: " << running 
+                      << " Thread ID: " << std::this_thread::get_id() << std::endl;
+
             // Wait for a task or stop signal
             condition.wait(lock, [this]() { 
                 return !taskQueue.empty() || !running; 
@@ -80,12 +98,21 @@ void ActivePipelineStage::workerThread() {
 
             // Check if we should exit
             if (!running && taskQueue.empty()) {
+                std::cout << "[ACTIVE-PIPELINE-DEBUG] Exiting worker thread. No more tasks." << std::endl;
                 return;
             }
 
             // Get the task
-            task = std::move(taskQueue.front());
-            taskQueue.pop();
+            if (!taskQueue.empty()) {
+                std::cout << "[ACTIVE-PIPELINE-DEBUG] Before pop - Queue size: " 
+                          << taskQueue.size() << std::endl;
+                
+                task = std::move(taskQueue.front());
+                taskQueue.pop();
+                
+                std::cout << "[ACTIVE-PIPELINE-DEBUG] After pop - Queue size: " 
+                          << taskQueue.size() << std::endl;
+            }
             
             // Notify any waiting producers
             condition.notify_one();
@@ -93,6 +120,12 @@ void ActivePipelineStage::workerThread() {
 
         // Process the task
         if (task) {
+            std::cout << "[ACTIVE-PIPELINE-DEBUG] Processing task. Thread ID: " 
+                      << std::this_thread::get_id() << std::endl;
+            
+            // Simulate some processing time to help visualize queue
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
             try {
                 // Apply stage-specific transformation
                 task = transformTask(task);
