@@ -23,19 +23,17 @@ public:
         SEND        // Output/Sink stage
     };
 
-    // Multiple constructors to support different use cases
+    // Primary constructor with default arguments
     explicit ActivePipelineStage(
         StageType type = StageType::PROCESS, 
         size_t bufferSize = 10,
         size_t maxRetries = 3
     );
 
-    // Additional constructors
-    explicit ActivePipelineStage(StageType type);
-    explicit ActivePipelineStage(StageType type, size_t bufferSize);
-    explicit ActivePipelineStage(StageType type, unsigned long);
-    ActivePipelineStage();
+    // Simplified constructors to resolve overloading
+    explicit ActivePipelineStage(StageType type) : ActivePipelineStage(type, 10, 3) {}
 
+    // Destructor
     ~ActivePipelineStage();
 
     // Pipeline stage management
@@ -80,11 +78,10 @@ private:
 
 class ActivePipeline {
 public:
-    // Multiple constructors to support different use cases
+    // Primary constructor with default argument
     explicit ActivePipeline(size_t concurrencyLevel = 4);
-    explicit ActivePipeline(unsigned long concurrencyLevel);
-    ActivePipeline();
 
+    // Destructor
     ~ActivePipeline();
 
     // Enhanced pipeline construction

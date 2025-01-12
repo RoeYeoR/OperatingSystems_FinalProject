@@ -23,22 +23,6 @@ ActivePipelineStage::ActivePipelineStage(
     worker = std::make_unique<std::thread>(&ActivePipelineStage::workerThread, this);
 }
 
-ActivePipelineStage::ActivePipelineStage(StageType type) : 
-    ActivePipelineStage(type, 10, 3) 
-{}
-
-ActivePipelineStage::ActivePipelineStage(StageType type, size_t bufferSize) : 
-    ActivePipelineStage(type, bufferSize, 3) 
-{}
-
-ActivePipelineStage::ActivePipelineStage(StageType type, unsigned long) : 
-    ActivePipelineStage(type) 
-{}
-
-ActivePipelineStage::ActivePipelineStage() : 
-    ActivePipelineStage(StageType::PROCESS) 
-{}
-
 ActivePipelineStage::~ActivePipelineStage() {
     stop();
 }
@@ -159,14 +143,6 @@ ActivePipeline::ActivePipeline(size_t concurrencyLevel)
       globalErrorHandler([](const std::exception& e) {
           std::cerr << "Unhandled pipeline error: " << e.what() << std::endl;
       }) 
-{}
-
-ActivePipeline::ActivePipeline() : 
-    ActivePipeline(4) 
-{}
-
-ActivePipeline::ActivePipeline(unsigned long concurrencyLevel) : 
-    ActivePipeline(static_cast<size_t>(concurrencyLevel)) 
 {}
 
 ActivePipeline::~ActivePipeline() {
