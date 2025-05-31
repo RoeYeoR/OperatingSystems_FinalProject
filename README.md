@@ -285,21 +285,4 @@ The project uses modern C++ memory management techniques:
   </pre>
 </div>
 
-## 📄 License
 
-This project is an educational demonstration of operating systems concepts and concurrency patterns.
-
----
-
-<div align="center">
-  <p>📊 <strong>Memory Usage Report</strong></p>
-  <p>Check out the memory analysis results:</p>
-  <div style="display: inline-block; text-align: center; margin: 10px;">
-    <img src="valgrid-client.png" alt="Client Memory Analysis" width="300"/>
-    <p><em>Client Memory Analysis</em></p>
-  </div>
-  <div style="display: inline-block; text-align: center; margin: 10px;">
-    <img src="valgrid-server.png" alt="Server Memory Analysis" width="300"/>
-    <p><em>Server Memory Analysis</em></p>
-  </div>
-</div>
